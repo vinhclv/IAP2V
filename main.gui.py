@@ -8,10 +8,13 @@ import concurrent.futures
 from datetime import datetime
 import sv_ttk
 
-# --- IMPORT LOGIC CŨ ---
+# --- IMPORT LOGIC ---
 from browser_setup import init_driver_from_profile
 from image_to_prompt import process_image_to_prompt
 from image_and_prompt_to_video import generate_video_for_file
+
+# [MỚI] Import Tab quản lý profile
+from profile_manager import ProfileManagerTab 
 
 # --- CẤU HÌNH ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -35,12 +38,26 @@ class BatchApp:
 
         self._setup_ui()
         
-        # Tự động load thống kê lần đầu sau 1s để giao diện kịp hiện
+        # Tự động load thống kê lần đầu
         self.root.after(1000, self.refresh_dashboard)
 
     def _setup_ui(self):
-        # === 1. HEADER & CẤU HÌNH PATH ===
-        frame_top = ttk.Frame(self.root, padding=10)
+        # === TẠO HỆ THỐNG TAB (NOTEBOOK) ===
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # -- TAB 1: CHẠY AUTO (Giao diện cũ) --
+        self.tab_run = ttk.Frame(self.notebook)
+        self.notebook.add(self.tab_run, text="🏃 Chạy Auto")
+
+        # -- TAB 2: QUẢN LÝ PROFILES (Giao diện mới từ file khác) --
+        self.tab_profiles = ProfileManagerTab(self.notebook, DEFAULT_PROFILES)
+        self.notebook.add(self.tab_profiles, text="👥 Quản lý Profiles")
+
+        # === SETUP GIAO DIỆN CHO TAB 1 (Copy logic cũ vào đây, đổi self.root -> self.tab_run) ===
+        
+        # 1. HEADER & CẤU HÌNH PATH
+        frame_top = ttk.Frame(self.tab_run, padding=10)
         frame_top.pack(fill="x")
 
         frame_path = ttk.LabelFrame(frame_top, text="📂 Cấu hình Thư mục", padding=(15, 10))
@@ -64,71 +81,61 @@ class BatchApp:
 
         frame_path.columnconfigure(1, weight=1)
 
-        # === 2. DASHBOARD (THỐNG KÊ CHI TIẾT) ===
-        frame_stats = ttk.LabelFrame(self.root, text="📊 Thống kê Trạng thái", padding=15)
+        # 2. DASHBOARD
+        frame_stats = ttk.LabelFrame(self.tab_run, text="📊 Thống kê Trạng thái", padding=15)
         frame_stats.pack(fill="x", padx=10, pady=5)
 
-        frame_stats.columnconfigure(0, weight=1) # Profiles
-        frame_stats.columnconfigure(1, weight=2) # Text Task
-        frame_stats.columnconfigure(2, weight=2) # Video Task
+        frame_stats.columnconfigure(0, weight=1)
+        frame_stats.columnconfigure(1, weight=2)
+        frame_stats.columnconfigure(2, weight=2)
 
-        # -- Cột 1: Profiles --
+        # Profile Stats
         f1 = ttk.Frame(frame_stats)
         f1.grid(row=0, column=0, padx=10)
         ttk.Label(f1, text="Profiles", font=("Segoe UI", 11)).pack()
         self.lbl_profile = ttk.Label(f1, text="0", font=("Segoe UI", 28, "bold"), foreground="#4cc2ff")
         self.lbl_profile.pack()
 
-        # -- Cột 2: Text Task (Image -> Prompt) --
+        # Text Task Stats
         f2 = ttk.Frame(frame_stats)
         f2.grid(row=0, column=1, padx=10)
         ttk.Label(f2, text="Nhiệm vụ: Tạo Prompt", font=("Segoe UI", 11)).pack()
-        
-        # Frame con để chia 3 số: Tổng | Chưa làm | Xong
         f2_sub = ttk.Frame(f2)
         f2_sub.pack(pady=5)
         
-        # Chưa làm (Màu cam - Quan trọng nhất)
         self.lbl_txt_pending = ttk.Label(f2_sub, text="0", font=("Segoe UI", 28, "bold"), foreground="#ffaa00")
         self.lbl_txt_pending.grid(row=0, column=1, padx=20)
         ttk.Label(f2_sub, text="Cần làm").grid(row=1, column=1)
 
-        # Tổng (Màu xám)
         self.lbl_txt_total = ttk.Label(f2_sub, text="0", font=("Segoe UI", 14), foreground="#888")
         self.lbl_txt_total.grid(row=0, column=0, padx=10)
         ttk.Label(f2_sub, text="Tổng ảnh").grid(row=1, column=0)
 
-        # Xong (Màu xanh)
         self.lbl_txt_done = ttk.Label(f2_sub, text="0", font=("Segoe UI", 14), foreground="#00cc6a")
         self.lbl_txt_done.grid(row=0, column=2, padx=10)
         ttk.Label(f2_sub, text="Đã xong").grid(row=1, column=2)
 
-
-        # -- Cột 3: Video Task (Prompt -> Video) --
+        # Video Task Stats
         f3 = ttk.Frame(frame_stats)
         f3.grid(row=0, column=2, padx=10)
         ttk.Label(f3, text="Nhiệm vụ: Tạo Video", font=("Segoe UI", 11)).pack()
-        
         f3_sub = ttk.Frame(f3)
         f3_sub.pack(pady=5)
 
-        # Chưa làm
         self.lbl_vid_pending = ttk.Label(f3_sub, text="0", font=("Segoe UI", 28, "bold"), foreground="#ff5555")
         self.lbl_vid_pending.grid(row=0, column=1, padx=20)
         ttk.Label(f3_sub, text="Cần làm").grid(row=1, column=1)
 
-        # Tổng
         self.lbl_vid_total = ttk.Label(f3_sub, text="0", font=("Segoe UI", 14), foreground="#888")
         self.lbl_vid_total.grid(row=0, column=0, padx=10)
-        ttk.Label(f3_sub, text="Tổng Project").grid(row=1, column=0)
+        ttk.Label(f3_sub, text="Tổng").grid(row=1, column=0)
 
-        # Xong
         self.lbl_vid_done = ttk.Label(f3_sub, text="0", font=("Segoe UI", 14), foreground="#00cc6a")
         self.lbl_vid_done.grid(row=0, column=2, padx=10)
         ttk.Label(f3_sub, text="Đã xong").grid(row=1, column=2)
 
-        # === 3. ĐIỀU KHIỂN ===
-        frame_ctrl = ttk.Frame(self.root, padding=10)
+        # 3. ĐIỀU KHIỂN
+        frame_ctrl = ttk.Frame(self.tab_run, padding=10)
         frame_ctrl.pack(fill="x")
 
         lbl_limit = ttk.Label(frame_ctrl, text="Số lượng xử lý / 1 Profile:")
@@ -146,8 +153,8 @@ class BatchApp:
         self.btn_stop = ttk.Button(frame_ctrl, text="🛑 DỪNG KHẨN CẤP", command=self.stop_process, state="disabled")
         self.btn_stop.pack(side="right")
 
-        # === 4. LOGS ===
-        frame_log = ttk.LabelFrame(self.root, text="📜 Nhật ký hoạt động", padding=10)
+        # 4. LOGS
+        frame_log = ttk.LabelFrame(self.tab_run, text="📜 Nhật ký hoạt động", padding=10)
         frame_log.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         self.log_area = scrolledtext.ScrolledText(frame_log, height=10, state='disabled', font=("Consolas", 10))
@@ -157,9 +164,18 @@ class BatchApp:
         self.log_area.tag_config("ERROR", foreground="#ff5555")
         self.log_area.tag_config("WARNING", foreground="#ffb86c")
 
-    # ================= LOGIC DASHBOARD (QUAN TRỌNG) =================
+        # SỰ KIỆN CHUYỂN TAB: Khi quay lại tab 1 sẽ tự refresh số liệu
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+    def _on_tab_changed(self, event):
+        # Nếu người dùng chuyển sang Tab 0 (Chạy Auto), thì cập nhật lại số profile
+        # vì có thể họ vừa thêm/xóa ở Tab 2
+        selected_tab = self.notebook.index(self.notebook.select())
+        if selected_tab == 0:
+            self.refresh_dashboard()
+
+    # ================= LOGIC DASHBOARD (GIỮ NGUYÊN) =================
     def refresh_dashboard(self):
-        """Tính toán lại số liệu"""
         threading.Thread(target=self._calculate_stats, daemon=True).start()
 
     def _calculate_stats(self):
@@ -167,68 +183,46 @@ class BatchApp:
             inp = self.entry_input.get()
             out = self.entry_output.get()
 
-            # 1. Đếm Profiles
+            # Đếm Profiles
             if os.path.exists(DEFAULT_PROFILES):
                 profiles = [f for f in os.listdir(DEFAULT_PROFILES) if os.path.isdir(os.path.join(DEFAULT_PROFILES, f))]
                 n_prof = len(profiles)
             else:
                 n_prof = 0
 
-            # 2. Đếm Text Task
-            # Logic: Tìm tất cả ảnh trong Input -> Check folder Output xem có prompt.txt chưa
             pend_txt, comp_txt = self.get_image_status(inp, out)
-            
-            # 3. Đếm Video Task
-            # Logic: Tìm tất cả project trong Output có prompt.txt -> Check xem có video chưa
             pend_vid, comp_vid = self.get_video_status(out)
 
-            # Cập nhật UI
             self.root.after(0, lambda: self._update_labels(
                 n_prof, 
                 len(pend_txt), len(comp_txt), 
                 len(pend_vid), len(comp_vid)
             ))
         except Exception as e:
-            print(f"Lỗi Dashboard: {e}")
+            pass
 
     def _update_labels(self, n_prof, n_pend_txt, n_comp_txt, n_pend_vid, n_comp_vid):
-        # Update Profile
         self.lbl_profile.config(text=f"{n_prof}")
-
-        # Update Text Stats (Tổng = Pending + Completed)
         self.lbl_txt_total.config(text=f"{n_pend_txt + n_comp_txt}")
         self.lbl_txt_pending.config(text=f"{n_pend_txt}")
         self.lbl_txt_done.config(text=f"{n_comp_txt}")
-
-        # Update Video Stats
         self.lbl_vid_total.config(text=f"{n_pend_vid + n_comp_vid}")
         self.lbl_vid_pending.config(text=f"{n_pend_vid}")
         self.lbl_vid_done.config(text=f"{n_comp_vid}")
 
-    # ================= LOGIC CHECK TRẠNG THÁI =================
+    # ================= LOGIC CHECK TRẠNG THÁI (GIỮ NGUYÊN) =================
     def get_image_status(self, img_dir, out_dir):
-        """
-        Logic: 
-        1. Quét toàn bộ ảnh trong `img_dir`.
-        2. Với mỗi ảnh, kiểm tra folder tương ứng trong `out_dir` có `prompt.txt` chưa.
-        """
         if not os.path.exists(img_dir): return [], []
-        
         all_imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
         pending, completed = [], []
-        
         for img in all_imgs:
             name_no_ext = os.path.splitext(img)[0]
-            # Đường dẫn file prompt đích
             prompt_file = os.path.join(out_dir, name_no_ext, "prompt.txt")
             full_img_path = os.path.join(img_dir, img) 
-            
-            # Nếu prompt tồn tại -> Đã xong. Ngược lại -> Chưa làm.
             if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 0:
                 completed.append(full_img_path)
             else:
                 pending.append(full_img_path)
-                
         return pending, completed
 
     def get_video_status(self, out_dir):
@@ -238,18 +232,14 @@ class BatchApp:
         for sub in subfolders:
             sub_path = os.path.join(out_dir, sub)
             prompt_path = os.path.join(sub_path, "prompt.txt")
-            
-            # Chỉ tính những folder ĐÃ CÓ prompt.txt (đã xong bước 1)
             if os.path.exists(prompt_path):
                 imgs = [f for f in os.listdir(sub_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
                 if not imgs: continue
                 img_full_path = os.path.join(sub_path, imgs[0])
-                
                 video_dir = os.path.join(sub_path, "video")
                 is_done = False
                 if os.path.exists(video_dir):
                     if any(f.endswith('_8s.mp4') for f in os.listdir(video_dir)): is_done = True
-                
                 if is_done: completed.append(img_full_path)
                 else: pending.append(img_full_path)
         return pending, completed
