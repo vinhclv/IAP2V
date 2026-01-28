@@ -1,0 +1,146 @@
+import os
+import time
+import base64
+import mimetypes
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=print):
+    """
+    CHIẾN THUẬT: FAKE PASTE (GIẢ LẬP CTRL+V)
+    1. Chuyển ảnh sang Base64.
+    2. Focus vào ô chat.
+    3. Bắn sự kiện 'paste' chứa file ảnh vào ô chat.
+    """
+    try:
+        wait = WebDriverWait(driver, 30)
+        abs_path = os.path.abspath(image_path)
+        filename = os.path.basename(abs_path)
+        
+        # 1. Chuẩn bị dữ liệu ảnh
+        mime_type, _ = mimetypes.guess_type(abs_path)
+        if not mime_type: mime_type = 'image/png'
+        
+        with open(abs_path, 'rb') as f:
+            b64_data = base64.b64encode(f.read()).decode('utf-8')
+
+        log_callback(f"📋 Đang thực hiện Paste (Dán): {filename}...")
+
+        # 2. Tìm ô chat (Nơi sẽ nhận lệnh Paste)
+        try:
+            # Tìm ô nhập liệu (Rich Text Editor)
+            textbox = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div[contenteditable='true'], div[role='textbox']")))
+            
+            # Click vào để chắc chắn nó đang được chọn (Focus)
+            textbox.click()
+            time.sleep(0.5)
+        except Exception as e:
+            log_callback(f"⚠️ Không tìm thấy ô chat: {e}")
+            return False
+
+        # 3. SCRIPT JS GIẢ LẬP SỰ KIỆN PASTE
+        js_paste_script = """
+            var target = arguments[0];
+            var b64Data = arguments[1];
+            var fileName = arguments[2];
+            var fileType = arguments[3];
+
+            // Hàm chuyển Base64 -> Blob -> File
+            function b64toFile(b64Data, fileName, fileType) {
+                var byteCharacters = atob(b64Data);
+                var byteArrays = [];
+                for (var offset = 0; offset < byteCharacters.length; offset += 512) {
+                    var slice = byteCharacters.slice(offset, offset + 512);
+                    var byteNumbers = new Array(slice.length);
+                    for (var i = 0; i < slice.length; i++) {
+                        byteNumbers[i] = slice.charCodeAt(i);
+                    }
+                    var byteArray = new Uint8Array(byteNumbers);
+                    byteArrays.push(byteArray);
+                }
+                var blob = new Blob(byteArrays, {type: fileType});
+                return new File([blob], fileName, {type: fileType, lastModified: new Date().getTime()});
+            }
+
+            var file = b64toFile(b64Data, fileName, fileType);
+
+            // Tạo gói dữ liệu Clipboard (DataTransfer)
+            var dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+
+            // Tạo sự kiện Paste
+            var pasteEvent = new ClipboardEvent('paste', {
+                bubbles: true,
+                cancelable: true,
+                clipboardData: dataTransfer
+            });
+
+            // Bắn sự kiện vào ô chat
+            target.dispatchEvent(pasteEvent);
+        """
+
+        # Thực thi lệnh Paste
+        driver.execute_script(js_paste_script, textbox, b64_data, filename, mime_type)
+        log_callback("✅ Đã bắn sự kiện Paste.")
+
+        # 4. CHỜ PREVIEW (THUMBNAIL)
+        # Nếu Paste thành công, ảnh nhỏ phải hiện ra ngay
+        log_callback("⏳ Đang chờ Preview ảnh (5s)...")
+        time.sleep(5) 
+
+        # Kiểm tra xem có preview thật không (Check thẻ img trong vùng upload)
+        # Bước này tùy chọn, nhưng giúp bạn biết chắc chắn
+        
+        # 5. GỬI LỆNH
+        try:
+            textbox.send_keys(Keys.ENTER)
+            log_callback("🚀 Đã Enter gửi ảnh.")
+        except:
+            # Fallback nút gửi
+            try:
+                driver.find_element(By.CSS_SELECTOR, "button[aria-label^='Send']").click()
+            except:
+                log_callback("❌ Không bấm được nút gửi!")
+                return False
+
+        # --- 6. PHẦN CHỜ KẾT QUẢ (GIỮ NGUYÊN NHƯ CŨ) ---
+        log_callback("⏳ Đang đợi Gemini trả lời...")
+        RESPONSE_SELECTOR = "div.markdown-main-panel[id^='model-response-message-content']"
+        old_count = len(driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR))
+        WebDriverWait(driver, 120).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
+        
+        el = driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)[-1]
+        
+        # Smart Wait logic
+        stable_time = 0
+        last_text = ""
+        start_wait = time.time()
+        while stable_time < 3:
+            if time.time() - start_wait > 180: break
+            time.sleep(1)
+            curr = el.text.strip()
+            if curr == last_text and curr != "": stable_time += 1
+            else: stable_time = 0; last_text = curr
+
+        # Save
+        result_text = el.text.strip()
+        clean_lines = []
+        for line in result_text.splitlines():
+            l = line.strip()
+            if not l: continue
+            if l.lower().startswith("would you like") or l.lower().startswith("hope this help"):
+                break
+            clean_lines.append(l)
+        final_text = "\n".join(clean_lines)
+
+        prompt_file = os.path.join(output_subfolder, "prompt.txt")
+        with open(prompt_file, "w", encoding="utf-8") as f:
+            f.write(final_text)
+        log_callback(f"💾 Đã lưu: {os.path.basename(prompt_file)}")
+        return True
+
+    except Exception as e:
+        log_callback(f"❌ Lỗi xử lý: {e}")
+        return False
