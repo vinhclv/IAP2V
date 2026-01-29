@@ -81,11 +81,14 @@ def run_worker_task(profile_folder, file_batch, loop_type, assets_path, profiles
                         if os.path.exists(prompt_path):
                             with open(prompt_path, "r", encoding="utf-8") as f: 
                                 prompt_text = f.read().strip()
-                            generate_video_for_file(driver, item_path, prompt_text, video_out_dir)
-                            success = True
+                            
+                            # [SỬA Ở ĐÂY] Gán kết quả trả về của hàm vào biến success
+                            success = generate_video_for_file(driver, item_path, prompt_text, video_out_dir)
+                        
+                        # Không cần dòng success = True cứng nhắc nữa
                         else:
                             task_log(f"⚠️ Bỏ qua {file_name}: Thiếu prompt.txt", "WARNING")
-                            success = True 
+                            success = True # Thiếu prompt thì bỏ qua, coi như xong nhiệm vụ
                             pass
 
                 except Exception as e:

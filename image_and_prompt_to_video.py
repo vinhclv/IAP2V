@@ -9,11 +9,6 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from selenium.webdriver.common.action_chains import ActionChains # <--- Nhớ thêm import này
 # --- HÀM 1: ROBUST CLICK (Ưu tiên JS Click nếu Click thường tạch) ---
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
 
 # --- HÀM 1: ROBUST CLICK (BẤT TỬ) ---
 def robust_click(driver, element):
@@ -228,7 +223,7 @@ def generate_video_for_file(driver, image_path, prompt_text, output_folder):
 
     if os.path.exists(save_path):
         print(f"⏭️ Đã tồn tại: {final_video_name}")
-        return
+        return True
 
     print(f"===============\n🎬 Bắt đầu xử lý: {filename}")
     wait = WebDriverWait(driver, 10)
@@ -250,7 +245,7 @@ def generate_video_for_file(driver, image_path, prompt_text, output_folder):
         # 1. Upload ảnh (Chỉ gọi 1 lần duy nhất ở đây)
         if not upload_stealth(driver, image_path):
             print("⛔ Lỗi upload, dừng file này.")
-            return
+            return False
             
         # Tìm ô nhập liệu (XPath textarea của bạn)
         text_xpath = "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/textarea"
@@ -276,7 +271,7 @@ def generate_video_for_file(driver, image_path, prompt_text, output_folder):
 
     except Exception as e:
         print(f"❌ Lỗi thao tác nhập liệu: {e}")
-        return
+        return False
 
     # 4. --- CHỜ VIDEO MỚI & ÉP TẢI (FORCE LOAD) ---
     try:
@@ -330,14 +325,17 @@ def generate_video_for_file(driver, image_path, prompt_text, output_folder):
 
         if not new_video_element:
             print("❌ Timeout: Không tìm thấy video mới nào xuất hiện.")
-            return
+            return False
 
         # 4. Tải Video
         print(f"💾 Đang tải video: ...{new_video_element.get_attribute('src')[-15:]}")
         if download_blob_video(driver, new_video_element, save_path):
             print(f"✅ Đã lưu thành công: {save_path}")
+            return True
         else:
             print("❌ Tải thất bại.")
+            return False
 
     except Exception as e:
         print(f"❌ Lỗi quy trình: {e}")
+        return False
