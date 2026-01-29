@@ -284,7 +284,7 @@ def generate_video_for_file(driver, image_path, prompt_text, output_folder):
         start_wait = time.time()
         
         # Chờ 5 phút
-        while time.time() - start_wait < 180:
+        while time.time() - start_wait < 120:
             try:
                 # 1. Tìm TẤT CẢ thẻ video trên trang
                 current_videos = driver.find_elements(By.TAG_NAME, "video")
@@ -338,9 +338,6 @@ def generate_video_for_file(driver, image_path, prompt_text, output_folder):
             print(f"✅ Đã lưu thành công: {save_path}")
         else:
             print("❌ Tải thất bại.")
-
-    except Exception as e:
-        print(f"❌ Lỗi quy trình: {e}")
 
     except Exception as e:
         print(f"❌ Lỗi quy trình: {e}")
