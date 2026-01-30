@@ -90,8 +90,6 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
         log_callback("⏳ Đang chờ Preview ảnh (5s)...")
         time.sleep(5) 
 
-        # Kiểm tra xem có preview thật không (Check thẻ img trong vùng upload)
-        # Bước này tùy chọn, nhưng giúp bạn biết chắc chắn
         
         # 5. GỬI LỆNH
         try:

@@ -6,7 +6,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-
+import random
 from selenium.webdriver.common.action_chains import ActionChains # <--- Nhớ thêm import này
 # --- HÀM 1: ROBUST CLICK (Ưu tiên JS Click nếu Click thường tạch) ---
 
@@ -33,7 +33,7 @@ def setup_video_creation_mode(driver):
         try:
             create_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/button")))
             create_btn.click()
-            time.sleep(1)
+            time.sleep(random.uniform(0.5, 1.5))
         except:
             print("⚠️ Bỏ qua 'Tạo dự án'.")
 
@@ -49,7 +49,7 @@ def setup_video_creation_mode(driver):
         try:
             mode_dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[1]/div[1]/button")))
             robust_click(driver, mode_dropdown)
-            time.sleep(1.5)
+            time.sleep(random.uniform(1, 2))
 
             # 4. Chọn "Tạo video từ các thành phần"
             print("🎯 Chọn chế độ Thành phần...")
@@ -58,7 +58,7 @@ def setup_video_creation_mode(driver):
             )))
             driver.execute_script("arguments[0].click();", component_icon)
             print("✅ Đã chọn chế độ: Tạo video từ các thành phần")
-            time.sleep(1)
+            time.sleep(random.uniform(1, 2))
             
         except Exception as e:
             print(f"⚠️ Lỗi chọn chế độ: {e}")
@@ -67,7 +67,7 @@ def setup_video_creation_mode(driver):
         try:
             settings_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[1]/div[2]/button[2]")))
             robust_click(driver, settings_btn)
-            time.sleep(1.5) # Chờ bảng settings hiện ra
+            time.sleep(random.uniform(1, 2)) # Chờ bảng settings hiện ra
 
             # --- MỚI: CẤU HÌNH KHỔ NGANG (LANDSCAPE) ---
             print("🎯 Cấu hình Khổ ngang (Landscape)...")
@@ -76,7 +76,7 @@ def setup_video_creation_mode(driver):
                 By.XPATH, "/html/body/div[3]/div/div/div[1]/div[1]/button"
             )))
             robust_click(driver, ratio_dropdown)
-            time.sleep(1) # Chờ menu tỷ lệ nảy ra ở div[4]
+            time.sleep(random.uniform(1, 2)) # Chờ menu tỷ lệ nảy ra ở div[4]
 
             # Chọn Option (Khổ ngang)
             landscape_option = wait.until(EC.presence_of_element_located((
@@ -93,7 +93,7 @@ def setup_video_creation_mode(driver):
                 By.XPATH, "/html/body/div[3]/div/div/div[1]/div[2]/button"
             )))
             robust_click(driver, quantity_dropdown)
-            time.sleep(1) # Chờ menu số lượng nảy ra ở div[4]
+            time.sleep(random.uniform(1, 2)) 
 
             # Chọn Option 1
             # (Lưu ý: Bạn dùng chung XPath với landscape vì nó đều là mục đầu tiên trong list)
@@ -116,7 +116,6 @@ def setup_video_creation_mode(driver):
 
 
 
-# --- HÀM 3: UPLOAD TÀNG HÌNH (CẬP NHẬT LOGIC CHỜ) ---
 def upload_stealth(driver, file_path):
     try:
         wait = WebDriverWait(driver, 15)
@@ -128,7 +127,7 @@ def upload_stealth(driver, file_path):
             upload_trigger = driver.find_element(By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[2]/div[1]/div/div/button")
             if upload_trigger.is_displayed():
                 upload_trigger.click()
-                time.sleep(1)
+                time.sleep(random.uniform(1, 2))
         except:
             pass # Có thể input đã có sẵn trong DOM
 
@@ -155,7 +154,7 @@ def upload_stealth(driver, file_path):
             """, file_input)
             
             print(f"✅ Đã upload thành công: {os.path.basename(file_path)}")
-            time.sleep(5) # Chờ ảnh load lên UI
+            time.sleep(random.uniform(3, 5)) 
             
             cut_and_save_button = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[3]/div[3]/div/div/div[2]/div/button[3]")))
             
@@ -211,131 +210,308 @@ def download_blob_video(driver, video_element, save_path):
         print(f"❌ Lỗi download blob: {e}")
         return False
 
-# --- HÀM 4: XỬ LÝ 1 FILE (MAIN LOGIC) ---
-def generate_video_for_file(driver, image_path, prompt_text, output_folder):
-    # 2. CẤU HÌNH GIAO DIỆN (NẾU CẦN)
-    setup_video_creation_mode(driver) 
+
+def process_video_batch(driver, file_batch, output_folder, log_callback=print):
+    """
+    Xử lý một mẻ (Batch) tối đa 5 file.
+    Gửi liên tục -> Chờ tất cả -> Tải về dựa trên ID.
+    """
+    # 1. Cấu hình giao diện một lần cho cả batch
+    setup_video_creation_mode(driver)
     
-    filename = os.path.basename(image_path)
-    name_no_ext = os.path.splitext(filename)[0]
-    final_video_name = f"{name_no_ext}_8s.mp4"
-    save_path = os.path.join(output_folder, final_video_name)
-
-    if os.path.exists(save_path):
-        print(f"⏭️ Đã tồn tại: {final_video_name}")
-        return True
-
-    print(f"===============\n🎬 Bắt đầu xử lý: {filename}")
-    wait = WebDriverWait(driver, 10)
+    # [FIX LỖI] Khai báo wait
+    wait = WebDriverWait(driver, 15)
     
-    # 1. LẤY DANH SÁCH SRC CŨ (Lưu tất cả src video đang có trên màn hình)
-    old_srcs = []
-    try:
-        videos = driver.find_elements(By.TAG_NAME, "video")
-        for v in videos:
-            src = v.get_attribute("src")
-            if src: old_srcs.append(src)
-        print(f"ℹ️ Đã ghi nhớ {len(old_srcs)} video cũ.")
-    except: pass
-
-
+    tasks = {} # Sổ theo dõi
     
-    # 3. NHẬP PROMPT & UPLOAD ẢNH
-    try:
-        # 1. Upload ảnh (Chỉ gọi 1 lần duy nhất ở đây)
-        if not upload_stealth(driver, image_path):
-            print("⛔ Lỗi upload, dừng file này.")
-            return False
+    # --- GIAI ĐOẠN 1: SUBMIT (GỬI LỆNH LIÊN TỤC) ---
+    log_callback(f"🚀 Bắt đầu gửi Batch gồm {len(file_batch)} file...")
+    
+    for index, item_path in enumerate(file_batch):
+        file_name = os.path.basename(item_path)
+        name_no_ext = os.path.splitext(file_name)[0]
+        
+        # === [LOGIC MỚI] TÍNH TOÁN ĐƯỜNG DẪN TRƯỚC ===
+        # 1. Lấy thư mục cha của file ảnh
+        parent_dir = os.path.dirname(item_path)
+        
+        # 2. Định nghĩa thư mục video nằm trong đó
+        video_output_dir = os.path.join(parent_dir, "video")
+        
+        # 3. Định nghĩa tên file output (8s)
+        final_video_name = f"{name_no_ext}_8s.mp4"
+        save_full_path = os.path.join(video_output_dir, final_video_name)
+        print(f"🚀 Đang gửi: {save_full_path}...")
+        # 4. Kiểm tra tồn tại -> SKIP nếu đã có
+        if os.path.exists(save_full_path):
+            log_callback(f"⏭️ Đã tồn tại: {final_video_name} -> Bỏ qua.")
+            continue # Nhảy sang file tiếp theo, không upload nữa
+        
+        # Tạo ID
+        short_id = f"ID_{int(time.time())}_{index}"
+        
+        # Đọc prompt
+        prompt_path = os.path.join(os.path.dirname(item_path), "prompt.txt")
+        if os.path.exists(prompt_path):
+            with open(prompt_path, "r", encoding="utf-8") as f: base_prompt = f.read().strip()
+        else:
+            base_prompt = "Cinematic video, high quality"
+
+        # [QUAN TRỌNG] Tiêm ID vào ĐẦU Prompt (để tránh bị cắt)
+        injected_prompt = f"||{short_id}|| {base_prompt}"
+        
+        # Lưu tasks (Lưu kèm đường dẫn save_full_path đã tính ở trên)
+        tasks[short_id] = {
+            "file_name": file_name,
+            "save_path_final": save_full_path, # <--- Lưu đường dẫn đích vào đây
+            "done": False,
+            "id_tag": f"||{short_id}||",
+            "full_input_path": item_path # Lưu lại để trả về nếu lỗi
+        }
+        
+        log_callback(f"📤 [{index+1}/{len(file_batch)}] Đang gửi: {file_name}...")
+
+        try:
+            # 1. Upload ảnh
+            if not upload_stealth(driver, item_path):
+                log_callback(f"❌ Upload thất bại: {file_name}")
+                del tasks[short_id]; continue
+
+            # 2. Tìm ô nhập liệu
+            text_xpath = "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/textarea"
+            textbox = wait.until(EC.element_to_be_clickable((By.XPATH, text_xpath)))
+            # 3. Nhập Prompt mới
+            textbox.click()
+            for line in injected_prompt.split('\n'):
+                textbox.send_keys(line)
+                time.sleep(0.1)
             
-        # Tìm ô nhập liệu (XPath textarea của bạn)
-        text_xpath = "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/textarea"
-        textbox = wait.until(EC.element_to_be_clickable((By.XPATH, text_xpath)))
+            time.sleep(random.uniform(1, 2))
 
+            # 4. Bấm nút TẠO
+            btn_gen = driver.find_element(By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[2]/div[2]/button[2]")
+            robust_click(driver, btn_gen)
+            
+            log_callback(f"⏳ Đã bấm tạo. Nghỉ 5s trước khi gửi file tiếp theo...")
+            time.sleep(random.uniform(3, 5)) 
 
-        
-        # 3. Nhập Prompt mới
-        textbox.click()
-        for line in prompt_text.split('\n'):
-            textbox.send_keys(line)
-            time.sleep(0.1)
-        
-        time.sleep(1)
+        except Exception as e:
+            log_callback(f"❌ Lỗi khi gửi {file_name}: {e}")
+            if short_id in tasks: del tasks[short_id]
 
-        # 4. Bấm nút TẠO
-        generate_btn = wait.until(EC.element_to_be_clickable((
-            By.XPATH, 
-            "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[2]/div[2]/button[2][not(@disabled)]"
-        )))
-        robust_click(driver, generate_btn)
-        print("🚀 Đã bấm TẠO! Đang chờ video render...")
+    # --- GIAI ĐOẠN 2: COLLECT (CHỜ VÀ GẶT LÚA) ---
+    if not tasks: return False, file_batch 
 
-    except Exception as e:
-        print(f"❌ Lỗi thao tác nhập liệu: {e}")
-        return False
+    log_callback(f"⏳ Đã gửi xong. Đang chờ kết quả cho {len(tasks)} video...")
+    
+    start_wait = time.time()
+    max_wait_time = 180 
+    
+    while time.time() - start_wait < max_wait_time:
+        if all(t["done"] for t in tasks.values()):
+            log_callback("✅ Batch hoàn thành 100%!")
+            return True, []
 
-    # 4. --- CHỜ VIDEO MỚI & ÉP TẢI (FORCE LOAD) ---
-    try:
-        new_video_element = None
-        start_wait = time.time()
-        
-        # Chờ 5 phút
-        while time.time() - start_wait < 120:
+        # Quét từng ID đang chờ
+        for uid, info in tasks.items():
+            if info["done"]: continue 
+            
             try:
-                # 1. Tìm TẤT CẢ thẻ video trên trang
-                current_videos = driver.find_elements(By.TAG_NAME, "video")
+                # XPath "Thần thánh"
+                xpath_dynamic = f"//*[contains(text(), '{info['id_tag']}')]/ancestor::div[.//video][1]//video"
                 
-                found_new = False
-                for vid in current_videos:
-                    src = vid.get_attribute("src")
+                video_matches = driver.find_elements(By.XPATH, xpath_dynamic)
+                
+                if video_matches:
+                    video_el = video_matches[0]
+                    rs = driver.execute_script("return arguments[0].readyState;", video_el)
                     
-                    # LOGIC LỌC:
-                    # - Phải có src
-                    # - Src phải chứa http hoặc blob
-                    # - Src KHÔNG ĐƯỢC nằm trong danh sách cũ (old_srcs)
-                    if src and ("blob:" in src or "http" in src) and (src not in old_srcs):
+                    if rs == 4: # HAVE_ENOUGH_DATA
+                        # [LOGIC MỚI] Tạo folder output nếu chưa có
+                        os.makedirs(os.path.dirname(info["save_path_final"]), exist_ok=True)
                         
-                        # In ra để debug xem bắt được cái gì
-                        # print(f"🔎 Nghi vấn video mới: ...{src[-15:]}")
-
-                        # --- KIỂM TRA READY STATE ---
-                        rs = driver.execute_script("return arguments[0].readyState;", vid)
+                        log_callback(f"💾 Tải về: {info['file_name']}")
                         
-                        if rs >= 1:
-                            print(f"✅ Video mới đã SẴN SÀNG! (ReadyState: {rs})")
-                            new_video_element = vid
-                            found_new = True
-                            break # Thoát vòng lặp for (tìm thấy video)
+                        # Tải về đúng đường dẫn đã tính từ đầu
+                        if download_blob_video(driver, video_el, info["save_path_final"]):
+                            log_callback(f"✅ OK: {os.path.basename(info['save_path_final'])}")
+                            info["done"] = True
                         else:
-                            # Kích hoạt tải (Force Load)
-                            print(f"⚠️ Thấy video mới nhưng chưa load (RS={rs}). Kích hoạt...")
-                            driver.execute_script("""
-                                var v = arguments[0];
-                                v.muted = true;
-                                v.play().then(()=>{ v.pause(); }).catch(()=>{});
-                            """, vid)
-                
-                if found_new:
-                    break # Thoát vòng lặp while (đã có kết quả)
+                            log_callback(f"⚠️ Lỗi tải file: {info['file_name']}")
+                    
+                    elif rs == 0: 
+                        driver.execute_script("arguments[0].play().then(()=>arguments[0].pause()).catch(()=>{});", video_el)
 
             except Exception as e:
-                # print(f"Lỗi nhẹ trong loop: {e}")
-                pass
+                pass 
+        
+        time.sleep(3) # Quét lại mỗi 3s
+
+    # --- KẾT THÚC ---
+    failed_files = []
+    for uid, info in tasks.items():
+        if not info["done"]:
+            log_callback(f"❌ Timeout: {info['file_name']}")
+            original = next((p for p in file_batch if os.path.basename(p) == info["file_name"]), None)
+            if original: failed_files.append(original)
+
+    return len(failed_files) == 0, failed_files
+
+
+# def process_video_batch(driver, file_batch, ignored_output_folder, log_callback=print):
+
+#     """
+#     Xử lý Batch có kiểm tra file tồn tại và lưu vào folder /video/ riêng của từng ảnh.
+#     Lưu ý: Tham số thứ 3 (ignored_output_folder) sẽ bị bỏ qua để dùng logic đường dẫn tương đối.
+#     """
+#     setup_video_creation_mode(driver)
+    
+#     # [FIX LỖI] Khai báo wait
+#     wait = WebDriverWait(driver, 15)
+    
+#     tasks = {} # Sổ theo dõi
+    
+#     # --- GIAI ĐOẠN 1: SUBMIT (GỬI LỆNH LIÊN TỤC) ---
+#     log_callback(f"🚀 Bắt đầu gửi Batch gồm {len(file_batch)} file...")
+    
+#     for index, item_path in enumerate(file_batch):
+#         file_name = os.path.basename(item_path)
+#         name_no_ext = os.path.splitext(file_name)[0]
+        
+#         # === [LOGIC MỚI] TÍNH TOÁN ĐƯỜNG DẪN TRƯỚC ===
+#         # 1. Lấy thư mục cha của file ảnh
+#         parent_dir = os.path.dirname(item_path)
+        
+#         # 2. Định nghĩa thư mục video nằm trong đó
+#         video_output_dir = os.path.join(parent_dir, "video")
+        
+#         # 3. Định nghĩa tên file output (8s)
+#         final_video_name = f"{name_no_ext}_8s.mp4"
+#         save_full_path = os.path.join(video_output_dir, final_video_name)
+        
+#         # 4. Kiểm tra tồn tại -> SKIP nếu đã có
+#         if os.path.exists(save_full_path):
+#             log_callback(f"⏭️ Đã tồn tại: {final_video_name} -> Bỏ qua.")
+#             continue # Nhảy sang file tiếp theo, không upload nữa
             
-            time.sleep(3)
+#         # ===============================================
+        
+#         # Tạo ID ngắn gọn
+#         short_id = f"ID_{int(time.time())}_{index}"
+        
+#         # Đọc prompt
+#         prompt_path = os.path.join(parent_dir, "prompt.txt")
+#         if os.path.exists(prompt_path):
+#             with open(prompt_path, "r", encoding="utf-8") as f: base_prompt = f.read().strip()
+#         else:
+#             base_prompt = "Cinematic video, high quality"
 
-        if not new_video_element:
-            print("❌ Timeout: Không tìm thấy video mới nào xuất hiện.")
-            return False
+#         # [QUAN TRỌNG] Tiêm ID vào ĐẦU Prompt
+#         injected_prompt = f"||{short_id}|| {base_prompt}"
+        
+#         # Lưu tasks (Lưu kèm đường dẫn save_full_path đã tính ở trên)
+#         tasks[short_id] = {
+#             "file_name": file_name,
+#             "save_path_final": save_full_path, # <--- Lưu đường dẫn đích vào đây
+#             "done": False,
+#             "id_tag": f"||{short_id}||",
+#             "full_input_path": item_path # Lưu lại để trả về nếu lỗi
+#         }
+        
+#         log_callback(f"📤 [{index+1}/{len(file_batch)}] Đang gửi: {file_name}...")
 
-        # 4. Tải Video
-        print(f"💾 Đang tải video: ...{new_video_element.get_attribute('src')[-15:]}")
-        if download_blob_video(driver, new_video_element, save_path):
-            print(f"✅ Đã lưu thành công: {save_path}")
-            return True
-        else:
-            print("❌ Tải thất bại.")
-            return False
+#         try:
+#             # 1. Upload ảnh
+#             if not upload_stealth(driver, item_path):
+#                 log_callback(f"❌ Upload thất bại: {file_name}")
+#                 del tasks[short_id]; continue
 
-    except Exception as e:
-        print(f"❌ Lỗi quy trình: {e}")
-        return False
+#             # 2. Tìm ô nhập liệu
+#             text_xpath = "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/textarea"
+#             textbox = wait.until(EC.element_to_be_clickable((By.XPATH, text_xpath)))
+            
+#             # 3. Nhập Prompt (Giả lập hành vi người dùng + JS)
+#             textbox.click()
+#             time.sleep(0.5)
+#             driver.execute_script("""
+#                 var el = arguments[0];
+#                 el.value = arguments[1];
+#                 el.dispatchEvent(new Event('input', { bubbles: true }));
+#                 el.dispatchEvent(new Event('change', { bubbles: true }));
+#             """, textbox, injected_prompt)
+            
+#             time.sleep(random.uniform(1, 2))
+
+#             # 4. Bấm nút TẠO
+#             btn_gen = driver.find_element(By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[2]/div[2]/button[2]")
+#             robust_click(driver, btn_gen)
+            
+#             # 5. Nghỉ 5s (random chút) trước khi gửi file tiếp theo
+#             log_callback(f"⏳ Đã bấm tạo. Nghỉ một chút...")
+#             time.sleep(random.uniform(4, 6)) 
+
+#         except Exception as e:
+#             log_callback(f"❌ Lỗi khi gửi {file_name}: {e}")
+#             if short_id in tasks: del tasks[short_id]
+
+#     # --- GIAI ĐOẠN 2: COLLECT (CHỜ VÀ GẶT LÚA) ---
+#     # Nếu tasks rỗng (do đã skip hết hoặc lỗi hết), trả về ngay
+#     if not tasks: 
+#         return True, [] 
+
+#     log_callback(f"⏳ Đã gửi xong. Đang chờ kết quả cho {len(tasks)} video...")
+    
+#     start_wait = time.time()
+#     max_wait_time = 300 # 5 phút timeout cho cả mẻ
+    
+#     while time.time() - start_wait < max_wait_time:
+#         if all(t["done"] for t in tasks.values()):
+#             log_callback("✅ Batch hoàn thành 100%!")
+#             return True, []
+
+#         # Quét từng ID đang chờ
+#         for uid, info in tasks.items():
+#             if info["done"]: continue 
+            
+#             try:
+#                 # XPath "Thần thánh"
+#                 xpath_dynamic = f"//*[contains(text(), '{info['id_tag']}')]/ancestor::div[.//video][1]//video"
+                
+#                 video_matches = driver.find_elements(By.XPATH, xpath_dynamic)
+                
+#                 if video_matches:
+#                     video_el = video_matches[0]
+#                     rs = driver.execute_script("return arguments[0].readyState;", video_el)
+                    
+#                     if rs == 4: # HAVE_ENOUGH_DATA
+#                         # [LOGIC MỚI] Tạo folder output nếu chưa có
+#                         os.makedirs(os.path.dirname(info["save_path_final"]), exist_ok=True)
+                        
+#                         log_callback(f"💾 Tải về: {info['file_name']}")
+                        
+#                         # Tải về đúng đường dẫn đã tính từ đầu
+#                         if download_blob_video(driver, video_el, info["save_path_final"]):
+#                             log_callback(f"✅ OK: {os.path.basename(info['save_path_final'])}")
+#                             info["done"] = True
+#                         else:
+#                             log_callback(f"⚠️ Lỗi tải file: {info['file_name']}")
+                    
+#                     elif rs == 0: 
+#                         driver.execute_script("arguments[0].play().then(()=>arguments[0].pause()).catch(()=>{});", video_el)
+
+#             except Exception as e:
+#                 pass 
+        
+#         time.sleep(3) # Quét lại mỗi 3s
+
+#     # --- KẾT THÚC ---
+#     failed_files = []
+#     for uid, info in tasks.items():
+#         if not info["done"]:
+#             log_callback(f"❌ Timeout: {info['file_name']}")
+#             # Trả về đường dẫn input gốc để retry
+#             failed_files.append(info['full_input_path'])
+
+#     return len(failed_files) == 0, failed_files
+
+
