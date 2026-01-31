@@ -212,10 +212,7 @@ def download_blob_video(driver, video_element, save_path):
 
 
 def process_video_batch(driver, file_batch, output_folder, log_callback=print):
-    """
-    Xử lý một mẻ (Batch) tối đa 5 file.
-    Gửi liên tục -> Chờ tất cả -> Tải về dựa trên ID.
-    """
+    time.sleep(4)
     # 1. Cấu hình giao diện một lần cho cả batch
     setup_video_creation_mode(driver)
     
@@ -276,12 +273,14 @@ def process_video_batch(driver, file_batch, output_folder, log_callback=print):
             if not upload_stealth(driver, item_path):
                 log_callback(f"❌ Upload thất bại: {file_name}")
                 del tasks[short_id]; continue
-
+            
+            time.sleep(random.uniform(1, 2))
             # 2. Tìm ô nhập liệu
             text_xpath = "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/textarea"
             textbox = wait.until(EC.element_to_be_clickable((By.XPATH, text_xpath)))
             # 3. Nhập Prompt mới
             textbox.click()
+            log_callback(f"Đang nhập prompt: {injected_prompt[3:]}...")
             for line in injected_prompt.split('\n'):
                 textbox.send_keys(line)
                 time.sleep(0.1)
@@ -305,7 +304,7 @@ def process_video_batch(driver, file_batch, output_folder, log_callback=print):
     log_callback(f"⏳ Đã gửi xong. Đang chờ kết quả cho {len(tasks)} video...")
     
     start_wait = time.time()
-    max_wait_time = 180 
+    max_wait_time = 120 
     
     while time.time() - start_wait < max_wait_time:
         if all(t["done"] for t in tasks.values()):

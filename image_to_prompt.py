@@ -122,23 +122,33 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
             if curr == last_text and curr != "": stable_time += 1
             else: stable_time = 0; last_text = curr
 
-        # Save
-        result_text = el.text.strip()
+        # --- 7. KIỂM TRA ĐIỀU KIỆN "PROMPT:" ---
+        final_text = last_text.strip()
+        
+        # Kiểm tra logic: Phải bắt đầu bằng Prompt: (không phân biệt hoa thường)
+        if not final_text.lower().startswith("prompt:"):
+            log_callback(f"⚠️ Kết quả không hợp lệ (Không có 'Prompt:' ở đầu):\n'{final_text[:50]}...'")
+            return False
+
+        # Xử lý text (Bỏ dòng thừa ở cuối nếu có)
         clean_lines = []
-        for line in result_text.splitlines():
+        for line in final_text.splitlines():
             l = line.strip()
             if not l: continue
             if l.lower().startswith("would you like") or l.lower().startswith("hope this help"):
                 break
             clean_lines.append(l)
-        final_text = "\n".join(clean_lines)
+        
+        final_content = "\n".join(clean_lines)
 
+        # Lưu file
         prompt_file = os.path.join(output_subfolder, "prompt.txt")
         with open(prompt_file, "w", encoding="utf-8") as f:
-            f.write(final_text)
-        log_callback(f"💾 Đã lưu: {os.path.basename(prompt_file)}")
+            f.write(final_content)
+            
+        log_callback(f"💾 Đã lưu prompt hợp lệ: {os.path.basename(prompt_file)}")
         return True
 
     except Exception as e:
-        log_callback(f"❌ Lỗi xử lý: {e}")
+        log_callback(f"❌ Lỗi xử lý ngoại lệ: {e}")
         return False

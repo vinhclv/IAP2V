@@ -5,38 +5,76 @@ from image_and_prompt_to_video import process_video_batch # Hàm batch mới b�
 import time
 # --- 1. XỬ LÝ ẢNH -> PROMPT ---
 def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
-    """Xử lý danh sách ảnh để tạo prompt"""
-    # URL đích
-    driver.get("https://gemini.google.com/gem/1SxwK59ZujL2Y3DgrooTlI8IUzor7TMSq?usp=sharing")
-    time.sleep(5)
-    
-    # Check login
+    """
+    Xử lý danh sách ảnh để tạo prompt.
+    Logic sức khỏe: Dừng nếu lỗi liên tiếp hoặc thất bại toàn tập.
+    """
+    # 1. Vào trang & Check Login
+    try:
+        driver.get("https://gemini.google.com/gem/1eGtVu5CR6oCr6OM3Ynf_RCQjvYOHtoEz?usp=sharing")
+        time.sleep(5)
+    except Exception as e:
+        log_callback(f"❌ Lỗi mở trang Gemini: {e}")
+        return False, file_batch
+
     if "accounts.google.com" in driver.current_url:
+        log_callback("❌ Profile bị logout -> Dừng.")
         return False, file_batch # Fail session
 
     failed_list = list(file_batch)
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 5 # Ngưỡng lỗi cho phép liên tiếp
     
     for item_path in file_batch:
         file_name = os.path.basename(item_path)
         log_callback(f"▶️ [Text] Xử lý: {file_name}")
         
         try:
+            # 1. Chuẩn bị đường dẫn
             sub_name = os.path.splitext(file_name)[0]
             dest_folder = os.path.join(assets_path, sub_name)
             os.makedirs(dest_folder, exist_ok=True)
-            dest_img = os.path.join(dest_folder, file_name)
             
+            dest_img = os.path.join(dest_folder, file_name)
             if not os.path.exists(dest_img): shutil.copy2(item_path, dest_img)
             
-            # Gọi hàm xử lý core
-            if process_image_to_prompt(driver, dest_img, dest_folder, lambda m: log_callback(m)):
+            # 2. [SKIP] Kiểm tra nếu đã có prompt.txt rồi thì bỏ qua
+            prompt_file = os.path.join(dest_folder, "prompt.txt")
+            if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 10:
+                log_callback(f"⏭️ Đã có prompt: {file_name} -> Bỏ qua.")
+                failed_list.remove(item_path)
+                consecutive_errors = 0 # Reset lỗi
+                continue
+
+            # 3. Gọi hàm xử lý core
+            success = process_image_to_prompt(driver, dest_img, dest_folder, lambda m: log_callback(m))
+
+            if success:
                 log_callback(f"✅ Xong: {file_name}")
                 if item_path in failed_list: failed_list.remove(item_path)
+                consecutive_errors = 0 # Reset lỗi vì vừa thành công
             else:
-                log_callback(f"⚠️ Lỗi xử lý: {file_name}")
-        except Exception as e:
-            log_callback(f"❌ Exception: {e}")
+                consecutive_errors += 1
+                log_callback(f"⚠️ Lỗi xử lý ({consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}): {file_name}")
+                
+                # [STOP LOSS] Nếu lỗi liên tiếp quá nhiều -> Dừng Profile
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    log_callback("💀 Gemini lỗi liên tiếp -> Đánh dấu Profile hỏng.")
+                    return False, failed_list
 
+        except Exception as e:
+            log_callback(f"❌ Exception nghiêm trọng: {e}")
+            consecutive_errors += 1
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                return False, failed_list
+
+    # 4. Kiểm tra tổng kết
+    # Nếu chạy hết mà không được cái nào (Fail 100%) -> Profile hỏng
+    if len(failed_list) == len(file_batch):
+        log_callback("❌ Thất bại toàn tập (0/{}) -> Profile hỏng.".format(len(file_batch)))
+        return False, failed_list
+
+    # Nếu làm được ít nhất 1 cái (hoặc skip do đã có) -> Profile OK
     return True, failed_list
 
 # --- 2. XỬ LÝ PROMPT -> VIDEO (BATCH) ---
@@ -74,9 +112,6 @@ def handle_prompt_to_video(driver, file_batch, assets_path, log_callback):
         failed_count = len(failed_in_chunk)
         success_count = total_items - failed_count
         
-        # 2. Điều kiện "Tha thứ": 
-        # - Hoặc là batch chạy ngon 100% (is_batch_ok)
-        # - Hoặc là tỷ lệ thành công >= 50% (success_count >= total_items / 2)
         if is_batch_ok or (success_count >= total_items / 2):
             
             # Reset bộ đếm lỗi vì Profile vẫn làm việc được
