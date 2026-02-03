@@ -118,35 +118,50 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
         while stable_time < 3:
             if time.time() - start_wait > 180: break
             time.sleep(1)
-            curr = el.text.strip()
+            try:
+                curr = el.text.strip()
+            except: 
+                curr = last_text
+                
             if curr == last_text and curr != "": stable_time += 1
             else: stable_time = 0; last_text = curr
 
-        # --- 7. KIỂM TRA ĐIỀU KIỆN "PROMPT:" ---
+        # --- 7. XỬ LÝ TEXT VÀ LỌC LẤY 1 PROMPT DUY NHẤT ---
         final_text = last_text.strip()
         
-        # Kiểm tra logic: Phải bắt đầu bằng Prompt: (không phân biệt hoa thường)
+        # 1. Kiểm tra điều kiện đầu vào: Phải bắt đầu bằng Prompt:
         if not final_text.lower().startswith("prompt:"):
             log_callback(f"⚠️ Kết quả không hợp lệ (Không có 'Prompt:' ở đầu):\n'{final_text[:50]}...'")
             return False
 
-        # Xử lý text (Bỏ dòng thừa ở cuối nếu có)
+        # 2. Tách dòng và lọc
         clean_lines = []
-        for line in final_text.splitlines():
+        raw_lines = final_text.splitlines()
+        
+        for index, line in enumerate(raw_lines):
             l = line.strip()
-            if not l: continue
+            if not l: continue # Bỏ qua dòng trống
+
+            # Check dừng 1: Những câu thoại kết thúc của AI
             if l.lower().startswith("would you like") or l.lower().startswith("hope this help"):
                 break
+            
+            # [LOGIC MỚI] Check dừng 2: Nếu KHÔNG PHẢI dòng đầu tiên
+            # mà lại thấy xuất hiện chữ "Prompt:" lần nữa -> Cắt luôn phần sau
+            if index > 0 and l.lower().startswith("prompt:"):
+                break
+                
             clean_lines.append(l)
         
+        # Gộp lại thành văn bản
         final_content = "\n".join(clean_lines)
 
         # Lưu file
         prompt_file = os.path.join(output_subfolder, "prompt.txt")
         with open(prompt_file, "w", encoding="utf-8") as f:
             f.write(final_content)
-            
-        log_callback(f"💾 Đã lưu prompt hợp lệ: {os.path.basename(prompt_file)}")
+
+        log_callback(f"💾 Đã lưu prompt: {os.path.basename(prompt_file)}")
         return True
 
     except Exception as e:

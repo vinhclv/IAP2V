@@ -16,7 +16,13 @@ def run_worker_task(profile_folder, file_batch, task_type, assets_path, profiles
     # 1. Khởi tạo Driver
     task_log(f"🚀 Khởi động (Task: {task_type})...")
     driver = init_driver_from_profile(p_path, log_callback=lambda m: task_log(m))
-    
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+    "source": """
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        })
+    """
+    })
     if not driver:
         return False, list(file_batch) # Fail ngay từ đầu
 

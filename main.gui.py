@@ -12,7 +12,6 @@ import sv_ttk
 from profile_manager import ProfileManagerTab
 from utils import get_image_status, get_video_status
 from worker import run_worker_task
-
 # --- CẤU HÌNH ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PROFILES = os.path.join(BASE_DIR, "profiles")
@@ -151,6 +150,9 @@ class BatchApp:
 
         self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.refresh_dashboard() if self.notebook.index("current") == 0 else None)
 
+
+
+
     # --- UI HELPERS ---
     def _create_stat_col(self, parent, col, title, color, attr_prefix):
         f = ttk.Frame(parent)
@@ -219,7 +221,6 @@ class BatchApp:
         self.lbl_task_pending.config(text=f"{n_pend}")
         self.lbl_task_done.config(text=f"{n_comp}")
 
-    # ================= LOGIC CHẠY (GIỮ NGUYÊN) =================
     def continuous_profile_runner(self, profile_name, loop_type, out, limit):
         # ... (LOGIC GIỮ NGUYÊN KHÔNG ĐỔI) ...
         while not self.stop_event.is_set():

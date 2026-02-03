@@ -122,7 +122,6 @@ class ProfileManagerTab(ttk.Frame):
         size_mb = self.get_size(path)
         ttk.Label(card, text=f"{size_mb:.1f} MB", font=("Segoe UI", 8), foreground="#888").pack(side="right", padx=10)
 
-    # --- HÀM HỖ TRỢ MAIN GỌI ---
     def get_selected_profiles(self):
         """Trả về danh sách tên các profile đang được tích chọn"""
         return [name for name, var in self.profile_vars.items() if var.get()]
@@ -134,7 +133,6 @@ class ProfileManagerTab(ttk.Frame):
         for var in self.profile_vars.values():
             var.set(new_val)
 
-    # --- LOGIC CHỨC NĂNG (Thêm/Xóa/Import/Setup) ---
     def add_profile(self):
         name = self.entry_name.get().strip()
         if not name:
