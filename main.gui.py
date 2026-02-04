@@ -31,7 +31,7 @@ class BatchApp:
         self.stop_event = threading.Event()
         
         self.profile_health = {} 
-        self.MAX_RETRIES = 3     
+        self.MAX_RETRIES = 10     
         
         self.task_queue = queue.Queue()
         self.file_lock = threading.Lock() 
@@ -151,8 +151,6 @@ class BatchApp:
         self.notebook.bind("<<NotebookTabChanged>>", lambda e: self.refresh_dashboard() if self.notebook.index("current") == 0 else None)
 
 
-
-
     # --- UI HELPERS ---
     def _create_stat_col(self, parent, col, title, color, attr_prefix):
         f = ttk.Frame(parent)
@@ -222,82 +220,154 @@ class BatchApp:
         self.lbl_task_done.config(text=f"{n_comp}")
 
     def continuous_profile_runner(self, profile_name, loop_type, out, limit):
-        # ... (LOGIC GIỮ NGUYÊN KHÔNG ĐỔI) ...
         while not self.stop_event.is_set():
+            # 1. Kiểm tra sức khỏe Profile
             fails = self.profile_health.get(profile_name, 0)
             if fails >= self.MAX_RETRIES:
-                self.log(f"💀 Profile '{profile_name}' ĐÃ CHẾT (Dừng vĩnh viễn).", "ERROR"); return 
+                self.log(f"💀 Profile '{profile_name}' ĐÃ CHẾT (Dừng vĩnh viễn).", "ERROR")
+                return 
 
+            candidates = []
             batch = []
-            with self.file_lock: 
-                for _ in range(limit):
-                    if not self.task_queue.empty(): batch.append(self.task_queue.get())
-                    else: break
             
-            if not batch:
-                self.log(f"✅ Profile '{profile_name}' đã hết việc (Nghỉ).", "SUCCESS"); return 
+            # 2. Lấy ứng viên từ Queue và Đối soát triệt để với ổ đĩa
+            with self.file_lock: 
+                # Lấy ra các ứng viên tạm thời từ hàng đợi
+                for _ in range(limit):
+                    if not self.task_queue.empty():
+                        candidates.append(self.task_queue.get())
+                    else:
+                        break
+                
+                if not candidates:
+                    self.log(f"✅ Profile '{profile_name}' đã hết việc (Nghỉ).", "SUCCESS")
+                    return 
 
-            self.log(f"▶️ [{profile_name}] Nhận {len(batch)} file...", "INFO")
-            is_healthy, failed_items = run_worker_task(profile_name, batch, loop_type, out, DEFAULT_PROFILES, self.stop_event, self.log)
+                inp_path = self.entry_input.get()
+                if loop_type == "text":
+                    actual_pending, _ = get_image_status(inp_path, out)
+                else:
+                    actual_pending, _ = get_video_status(out)
+
+                batch = [item for item in candidates if item in actual_pending]
+                
+                finished_already = len(candidates) - len(batch)
+                if finished_already > 0:
+                    self.log(f"ℹ️ [{profile_name}] Bỏ qua {finished_already} file đã hoàn thành trước đó.", "INFO")
+
+            if not batch:
+                continue
+
+            self.log(f"▶️ [{profile_name}] Xử lý {len(batch)} file thực tế từ ổ đĩa...", "INFO")
+            is_healthy, failed_items = run_worker_task(
+                profile_name, batch, loop_type, out, DEFAULT_PROFILES, self.stop_event, self.log
+            )
 
             if failed_items:
                 self.log(f"♻️ [{profile_name}] Trả lại {len(failed_items)} file lỗi vào hàng đợi.", "WARNING")
                 with self.file_lock:
-                    for item in failed_items: self.task_queue.put(item) 
+                    for item in failed_items:
+                        self.task_queue.put(item) 
 
-            if is_healthy: self.profile_health[profile_name] = 0 
+            # 6. Cập nhật trạng thái sức khỏe Profile
+            if is_healthy: 
+                self.profile_health[profile_name] = 0 
             else:
                 self.profile_health[profile_name] += 1
-                self.log(f"⚠️ [{profile_name}] Bị lỗi ({self.profile_health[profile_name]}/{self.MAX_RETRIES})", "WARNING")
+                self.log(f"⚠️ [{profile_name}] Lỗi ({self.profile_health[profile_name]}/{self.MAX_RETRIES})", "WARNING")
 
             self.refresh_dashboard()
 
+
     def run_process(self, loop_type):
-        # ... (LOGIC GIỮ NGUYÊN) ...
-        inp = self.entry_input.get(); out = self.entry_output.get()
+        # --- 1. LẤY DỮ LIỆU ĐẦU VÀO ---
+        inp = self.entry_input.get()
+        out = self.entry_output.get()
+        
         try: limit = int(self.spin_limit.get())
         except: limit = 5; self.spin_limit.set(5)
+        
         try: setting_threads = int(self.spin_threads.get())
         except: setting_threads = 3; self.spin_threads.set(3)
 
         selected_profiles = self.tab_profiles.get_selected_profiles()
         if not selected_profiles:
-            self.log("❌ Chưa chọn Profile nào!", "ERROR"); self._reset_ui(); return
+            self.log("❌ Chưa chọn Profile nào!", "ERROR")
+            self._reset_ui()
+            return
 
         num_selected = len(selected_profiles)
-        max_threads = min(setting_threads, num_selected)
-        if setting_threads > num_selected:
-            self.log(f"⚠️ Đã điều chỉnh xuống {max_threads} luồng (do chỉ có {num_selected} profiles).", "WARNING")
         
+        # Khởi tạo bảng theo dõi sức khỏe (0 lỗi ban đầu)
         self.profile_health = {p: 0 for p in selected_profiles}
 
-        self.log("📦 Đang quét file...", "INFO")
-        if loop_type == "text": pending, _ = get_image_status(inp, out)
-        else: pending, _ = get_video_status(out)
-
-        if not pending:
-            self.log("🎉 Không có file nào cần xử lý!", "SUCCESS"); messagebox.showinfo("Thông báo", "Tất cả đã hoàn thành!"); self._reset_ui(); return
-
-        while not self.task_queue.empty(): self.task_queue.get()
-        for f in pending: self.task_queue.put(f)
-
-        self.log(f"🚀 Bắt đầu chế độ: {self.selected_mode.get()}", "INFO")
-        self.log(f"⚡ Tổng: {self.task_queue.qsize()} files | Đội hình: {num_selected} Profiles | Luồng: {max_threads}", "INFO")
-
+        self.log(f"🚀 BẮT ĐẦU CHIẾN DỊCH: {self.selected_mode.get()}", "INFO")
         self.root.after(2000, self._auto_refresh_loop)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
-            futures = []
-            for p_name in selected_profiles:
-                future = executor.submit(self.continuous_profile_runner, p_name, loop_type, out, limit)
-                futures.append(future)
-            concurrent.futures.wait(futures)
+        # --- 2. VÒNG LẶP CHIẾN DỊCH (MASTER LOOP) ---
+        # Vòng lặp này sẽ chạy mãi cho đến khi HẾT VIỆC hoặc HẾT PROFILE
+        while not self.stop_event.is_set():
+            
+            # A. QUÉT DỮ LIỆU THỰC TẾ TRÊN Ổ ĐĨA
+            self.log("🔍 Đang đối soát dữ liệu trên ổ đĩa...", "INFO")
+            if loop_type == "text": 
+                pending, _ = get_image_status(inp, out)
+            else: 
+                pending, _ = get_video_status(out)
 
-        if self.stop_event.is_set(): self.log("🛑 Đã dừng.", "WARNING")
-        else: 
-            self.log("🎉 ĐÃ HOÀN THÀNH TOÀN BỘ!", "SUCCESS")
-            messagebox.showinfo("Thành công", "Đã xong!")
+            # B. ĐIỀU KIỆN DỪNG 1: HẾT VIỆC
+            if not pending:
+                self.log("🎉 XÁC NHẬN: Ổ đĩa đã sạch bóng file cần làm. HOÀN THÀNH 100%!", "SUCCESS")
+                messagebox.showinfo("Thành công", "Đã xử lý triệt để toàn bộ file!")
+                break 
+
+            # C. ĐIỀU KIỆN DỪNG 2: HẾT QUÂN (PROFILE CHẾT SẠCH)
+            # Lọc ra những profile còn sống (số lỗi < MAX_RETRIES)
+            living_profiles = [p for p in selected_profiles if self.profile_health.get(p, 0) < self.MAX_RETRIES]
+            
+            if not living_profiles:
+                self.log("❌ TẤT CẢ PROFILE ĐÃ CHẾT! Dừng chiến dịch.", "ERROR")
+                messagebox.showerror("Lỗi nghiêm trọng", "Tất cả profile đã bị lỗi quá giới hạn. Tool dừng lại để bảo vệ tài khoản.")
+                break
+
+            # D. NẠP ĐẠN (CẬP NHẬT QUEUE)
+            # Xóa sạch queue cũ để nạp danh sách mới nhất từ ổ đĩa
+            while not self.task_queue.empty(): 
+                self.task_queue.get()
+            
+            for f in pending: 
+                self.task_queue.put(f)
+
+            # E. TÍNH TOÁN LUỒNG CHO ĐỢT NÀY
+            # Số luồng không được vượt quá số profile đang sống
+            current_max_threads = min(setting_threads, len(living_profiles))
+            
+            self.log(f"⚡ Đợt mới: {len(pending)} files | Quân số: {len(living_profiles)}/{num_selected} | Luồng: {current_max_threads}", "INFO")
+
+            # F. CHẠY EXECUTOR (GIAO VIỆC)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=current_max_threads) as executor:
+                futures = []
+                for p_name in living_profiles:
+                    # Gửi các "Tổ trưởng" đi làm việc
+                    future = executor.submit(self.continuous_profile_runner, p_name, loop_type, out, limit)
+                    futures.append(future)
+                
+                # Chờ cho đến khi tất cả profile trong đợt này báo nghỉ (hết queue hoặc chết)
+                concurrent.futures.wait(futures)
+
+            # G. NGHỈ NGƠI TRƯỚC KHI QUÉT LẠI
+            if self.stop_event.is_set(): 
+                break
+            
+            self.log("⏳ Đã xong một đợt. Nghỉ 5s chờ hệ thống file cập nhật...", "INFO")
+            time.sleep(5) 
+
+        # --- 3. KẾT THÚC ---
+        if self.stop_event.is_set(): 
+            self.log("🛑 Đã dừng theo yêu cầu.", "WARNING")
+        
         self._reset_ui()
+
 
     def _auto_refresh_loop(self):
         if self.is_running:

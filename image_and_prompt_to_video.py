@@ -32,31 +32,34 @@ def human_click_offset(driver, element):
     actions.move_to_element_with_offset(element, offset_x, offset_y)
     actions.pause(random.uniform(0.2, 0.5))
     actions.click().perform()
-
 def human_type(driver, element, text):
     element.click()
     time.sleep(random.uniform(0.5, 1.0))
 
-    text_len = len(text)
-    if text_len == 0: return
-
-    target_duration = 4.5
-    avg_delay_per_char = target_duration / text_len
-
-    avg_delay_per_char = max(0.05, min(avg_delay_per_char, 0.3))
-
-    for char in text:
-        element.send_keys(char)
+    # Chiến thuật: GÕ THEO CỤM (CHUNKING)
+    # Giúp giảm 90% độ trễ giao tiếp giữa Python và Trình duyệt
+    
+    idx = 0
+    while idx < len(text):
+        # 1. Lấy một cụm ký tự ngẫu nhiên (từ 4 đến 10 ký tự)
+        # Giống như người ta gõ nhanh một từ hoặc một cụm từ
+        chunk_size = random.randint(4, 10)
+        chunk = text[idx:idx+chunk_size]
         
-        delay = random.uniform(avg_delay_per_char * 0.5, avg_delay_per_char * 1.5)
+        # 2. Gửi cả cụm đi một lúc
+        element.send_keys(chunk)
         
-        if char in ' \n.,':
-            delay += 0.1 
-            
-        time.sleep(delay)
+        idx += chunk_size
+        
+        # 3. Delay cực ngắn giữa các cụm (0.05 - 0.15s)
+        # Tốc độ này tương đương người gõ máy tốc ký
+        time.sleep(random.uniform(0.05, 0.15))
+        
+        # 4. Thỉnh thoảng dừng lại xíu (ngẫu nhiên 10% cơ hội) như đang suy nghĩ
+        if random.random() < 0.1:
+            time.sleep(random.uniform(0.2, 0.5))
 
     time.sleep(random.uniform(0.5, 1.0))
-
 # --- HÀM 2: CẤU HÌNH GIAO DIỆN (FULL OPTION: MODE + RATIO + QUANTITY) ---
 def setup_video_creation_mode(driver):
     wait = WebDriverWait(driver, 5) 
@@ -147,8 +150,6 @@ def setup_video_creation_mode(driver):
     except Exception as e:
         print(f"❌ Lỗi cấu hình tổng: {e}")
         return True
-
-
 
 def upload_stealth(driver, file_path):
     try:
@@ -299,7 +300,7 @@ def process_video_batch(driver, file_batch, output_folder, log_callback=print):
     log_callback(f"⏳ Chờ render {len(tasks)} video...")
     start_time = time.time()
     
-    while time.time() - start_time < 300: # 5 phút timeout
+    while time.time() - start_time < 150:
         active_tasks = [uid for uid, info in tasks.items() if not info["done"]]
         if not active_tasks: 
             log_callback("✅ Tất cả video đã tải xong!")
@@ -308,30 +309,27 @@ def process_video_batch(driver, file_batch, output_folder, log_callback=print):
         for uid in active_tasks:
             info = tasks[uid]
             try:
-                # XPath tìm video
-                xpath_check = f"//*[contains(text(), '{info['id_tag']}')]/ancestor::div[.//video][1]//video"
+
+                xpath_check = f"//*[contains(text(), '{info['id_tag']}')]/ancestor::div[@data-index][1]//video"
+
                 videos = driver.find_elements(By.XPATH, xpath_check)
                 
                 if videos:
                     video_el = videos[0]
-                    
-                    # [MỚI 2] Lấy src của video hiện tại
                     current_src = video_el.get_attribute("src")
                     
-                    # [QUAN TRỌNG] Kiểm tra xem URL này đã tải chưa
-                    if current_src in downloaded_urls:
-                        # Đây là video cũ! Web chưa load xong video mới.
-                        # log_callback(f"⚠️ Phát hiện video cũ cho {uid}, đang chờ video mới...")
-                        continue 
-                    
-                    # Nếu src rỗng hoặc là blob:null -> Video chưa init
+                    # Nếu src rỗng hoặc null -> Bỏ qua
                     if not current_src or current_src == "null":
                         continue
+
+                    # [QUAN TRỌNG] Kiểm tra xem URL này đã tải chưa
+                    if current_src in downloaded_urls:
+                        continue 
 
                     # Kiểm tra readyState
                     rs = driver.execute_script("return arguments[0].readyState;", video_el)
                     
-                    if rs == 4: # Video đã tải xong
+                    if rs == 4: # Video đã tải xong (HAVE_ENOUGH_DATA)
                         os.makedirs(os.path.dirname(info["save_path"]), exist_ok=True)
                         log_callback(f"💾 Phát hiện Video mới: {uid}")
                         
@@ -340,18 +338,17 @@ def process_video_batch(driver, file_batch, output_folder, log_callback=print):
                                 log_callback(f"✅ Thành công: {uid}")
                                 info["done"] = True
                                 
-                                # [MỚI 3] Thêm URL này vào danh sách đen để không bắt lại
+                                # Thêm vào danh sách đen để không tải lại
                                 downloaded_urls.add(current_src)
                             else:
                                 log_callback(f"⚠️ Lỗi 0KB: {uid}")
                     
                     elif rs == 0: 
-                        # Kích hoạt video ngủ
+                        # Kích hoạt video ngủ (nếu cần)
                         driver.execute_script("arguments[0].play().then(()=>arguments[0].pause()).catch(()=>{});", video_el)
                         
             except Exception as e:
                 pass
-        
         time.sleep(3) 
 
     # --- TỔNG KẾT ---

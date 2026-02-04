@@ -16,6 +16,29 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
     """
     try:
         wait = WebDriverWait(driver, 30)
+
+        try:
+            # XPath này tìm nút button thứ 2 bên trong mọi thẻ uploader-file-preview
+            cancel_xpath = "//uploader-file-preview//button[2]"
+            
+            cancel_btns = driver.find_elements(By.XPATH, cancel_xpath)
+            
+            if len(cancel_btns) > 0:
+                log_callback(f"🧹 Phát hiện {len(cancel_btns)} ảnh cũ chưa gửi. Đang xóa...")
+                for btn in cancel_btns:
+                    try:
+                        # Dùng JS click để đảm bảo ăn ngay, bất chấp overlay
+                        driver.execute_script("arguments[0].click();", btn)
+                        time.sleep(0.2)
+                    except:
+                        pass
+                time.sleep(1) # Chờ UI cập nhật sau khi xóa
+            else:
+                # log_callback("✨ Input sạch, không có ảnh cũ.")
+                pass
+        except Exception as e:
+            log_callback(f"⚠️ Lỗi khi dọn ảnh cũ (không ảnh hưởng process chính): {e}")
+
         abs_path = os.path.abspath(image_path)
         filename = os.path.basename(abs_path)
         

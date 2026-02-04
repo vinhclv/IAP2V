@@ -61,6 +61,8 @@ def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                     log_callback("💀 Gemini lỗi liên tiếp -> Đánh dấu Profile hỏng.")
                     return False, failed_list
+                driver.refresh()
+                time.sleep(5)
 
         except Exception as e:
             log_callback(f"❌ Exception nghiêm trọng: {e}")
