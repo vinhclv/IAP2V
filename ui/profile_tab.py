@@ -5,44 +5,43 @@ import shutil
 import threading
 import time
 
-# Import hàm khởi tạo driver từ file setup
-from browser_setup import init_driver_from_profile
+from engine.browser import init_driver_from_profile
 
 class ProfileManagerTab(ttk.Frame):
     def __init__(self, parent, profiles_dir):
         super().__init__(parent)
         self.profiles_dir = profiles_dir
         
-        # Đảm bảo thư mục profiles tồn tại
+        # Ensure profiles directory exists
         if not os.path.exists(self.profiles_dir):
             os.makedirs(self.profiles_dir)
             
-        # Dictionary lưu biến Checkbox của từng profile
-        # Key: Tên Profile, Value: tk.BooleanVar
+        # Dictionary to store Checkbox variables for each profile
+        # Key: Profile Name, Value: tk.BooleanVar
         self.profile_vars = {} 
 
         self.setup_ui()
         self.refresh_list()
 
     def setup_ui(self):
-        # === 1. THANH CÔNG CỤ (TOP BAR) ===
+        # === 1. TOOLBAR (TOP BAR) ===
         frame_top = ttk.Frame(self, padding=10)
         frame_top.pack(fill="x")
 
-        # Ô nhập tên tạo mới
+        # Entry for new profile name
         self.entry_name = ttk.Entry(frame_top, width=30)
         self.entry_name.pack(side="left", padx=(0, 5))
         
-        ttk.Button(frame_top, text="➕ Tạo Mới", style="Accent.TButton", command=self.add_profile).pack(side="left")
+        ttk.Button(frame_top, text="➕ Create New", style="Accent.TButton", command=self.add_profile).pack(side="left")
         ttk.Button(frame_top, text="📂 Import", command=self.import_profile).pack(side="right")
         
-        # Nút chọn tất cả / Bỏ chọn
-        ttk.Button(frame_top, text="☑️ Chọn hết", command=self.select_all).pack(side="right", padx=5)
+        # Select All / Refresh Buttons
+        ttk.Button(frame_top, text="☑️ Select All", command=self.select_all).pack(side="right", padx=5)
         ttk.Button(frame_top, text="🔄 Refresh", command=self.refresh_list).pack(side="right", padx=5)
 
         ttk.Separator(self, orient="horizontal").pack(fill="x")
 
-        # === 2. VÙNG CHỨA DANH SÁCH (SCROLLABLE AREA) ===
+        # === 2. LIST AREA (SCROLLABLE AREA) ===
         self.canvas = tk.Canvas(self, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         
@@ -58,57 +57,57 @@ class ProfileManagerTab(ttk.Frame):
         self.canvas.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         self.scrollbar.pack(side="right", fill="y")
 
-        # Hỗ trợ cuộn chuột
+        # Mousewheel scrolling support
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
     def _on_mousewheel(self, event):
         self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
     def refresh_list(self):
-        """Vẽ lại toàn bộ danh sách profile"""
-        # Xóa hết widget cũ
+        """Redraw the entire profile list"""
+        # Clear old widgets
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
         
-        # Xóa dữ liệu biến checkbox cũ
+        # Clear old checkbox data
         self.profile_vars.clear()
 
         if os.path.exists(self.profiles_dir):
             folders = sorted([f for f in os.listdir(self.profiles_dir) if os.path.isdir(os.path.join(self.profiles_dir, f))])
             
             if not folders:
-                ttk.Label(self.scrollable_frame, text="Chưa có profile nào. Hãy tạo mới hoặc Import!", foreground="#888").pack(pady=20)
+                ttk.Label(self.scrollable_frame, text="No profiles found. Create new or Import!", foreground="#888").pack(pady=20)
                 return
 
             for folder_name in folders:
                 self.create_profile_card(folder_name)
 
     def create_profile_card(self, profile_name):
-        """Tạo giao diện thẻ cho 1 profile"""
+        """Create UI card for a single profile"""
         card = ttk.LabelFrame(self.scrollable_frame, padding=(5, 5))
         card.pack(fill="x", expand=True, padx=10, pady=2, anchor="n")
 
-        # --- [QUAN TRỌNG] CHECKBOX CHỌN PROFILE ---
-        var = tk.BooleanVar(value=True) # Mặc định tích chọn
-        self.profile_vars[profile_name] = var # Lưu vào dict để Main lấy
+        # --- [IMPORTANT] PROFILE SELECTION CHECKBOX ---
+        var = tk.BooleanVar(value=True) # Default checked
+        self.profile_vars[profile_name] = var # Save to dict for Main to access
         
         chk = ttk.Checkbutton(card, variable=var)
         chk.pack(side="left", padx=5)
-        # ------------------------------------------
+        # ----------------------------------------------
 
-        # Icon & Tên
+        # Icon & Name
         lbl_icon = ttk.Label(card, text="👤", font=("Segoe UI", 12))
         lbl_icon.pack(side="left", padx=5)
 
         lbl_name = ttk.Label(card, text=profile_name, font=("Segoe UI", 10, "bold"))
         lbl_name.pack(side="left", padx=5)
 
-        # Các nút chức năng
-        # Nút Xóa
+        # Action Buttons
+        # Delete Button
         btn_del = ttk.Button(card, text="🗑️", width=3, command=lambda p=profile_name: self.delete_profile(p))
         btn_del.pack(side="right", padx=2)
 
-        # Nút Setup
+        # Setup Button
         btn_setup = ttk.Button(
             card, 
             text="⚙️ Setup", 
@@ -117,17 +116,26 @@ class ProfileManagerTab(ttk.Frame):
         )
         btn_setup.pack(side="right", padx=2)
         
-        # Hiển thị dung lượng
+        # Display Size
         path = os.path.join(self.profiles_dir, profile_name)
-        size_mb = self.get_size(path)
-        ttk.Label(card, text=f"{size_mb:.1f} MB", font=("Segoe UI", 8), foreground="#888").pack(side="right", padx=10)
+        # Run size calculation in thread to avoid UI freeze if many profiles
+        threading.Thread(target=self._update_size_label, args=(path, card), daemon=True).start()
+
+    def _update_size_label(self, path, card_frame):
+        """Calculate folder size and update label (Thread safe way)"""
+        try:
+            size_mb = self.get_size(path)
+            # Use after() to update UI from thread
+            self.after(0, lambda: ttk.Label(card_frame, text=f"{size_mb:.1f} MB", font=("Segoe UI", 8), foreground="#888").pack(side="right", padx=10))
+        except:
+            pass
 
     def get_selected_profiles(self):
-        """Trả về danh sách tên các profile đang được tích chọn"""
+        """Return list of selected profile names"""
         return [name for name, var in self.profile_vars.items() if var.get()]
 
     def select_all(self):
-        """Chọn tất cả hoặc bỏ chọn tất cả"""
+        """Select all or Deselect all"""
         any_unchecked = any(not var.get() for var in self.profile_vars.values())
         new_val = True if any_unchecked else False
         for var in self.profile_vars.values():
@@ -136,17 +144,17 @@ class ProfileManagerTab(ttk.Frame):
     def add_profile(self):
         name = self.entry_name.get().strip()
         if not name:
-            messagebox.showwarning("Cảnh báo", "Vui lòng nhập tên Profile!")
+            messagebox.showwarning("Warning", "Please enter a Profile name!")
             return
 
         invalid_chars = '<>:"/\\|?*'
         if any(char in invalid_chars for char in name):
-            messagebox.showerror("Lỗi", "Tên không được chứa ký tự đặc biệt!")
+            messagebox.showerror("Error", "Name cannot contain special characters!")
             return
 
         new_path = os.path.join(self.profiles_dir, name)
         if os.path.exists(new_path):
-            messagebox.showerror("Lỗi", "Tên này đã tồn tại!")
+            messagebox.showerror("Error", "Name already exists!")
             return
 
         os.makedirs(new_path)
@@ -154,7 +162,7 @@ class ProfileManagerTab(ttk.Frame):
         self.refresh_list()
 
     def import_profile(self):
-        source_dir = filedialog.askdirectory(title="Chọn folder chứa dữ liệu Profile cũ")
+        source_dir = filedialog.askdirectory(title="Select old Profile folder")
         if not source_dir: return
 
         folder_name = os.path.basename(source_dir)
@@ -164,41 +172,43 @@ class ProfileManagerTab(ttk.Frame):
         dest_path = os.path.join(self.profiles_dir, folder_name)
 
         if os.path.exists(dest_path):
-            messagebox.showerror("Lỗi", f"Profile '{folder_name}' đã tồn tại! Vui lòng đổi tên folder gốc.")
+            messagebox.showerror("Error", f"Profile '{folder_name}' already exists! Please rename original folder.")
             return
 
         try:
             def copy_task():
                 shutil.copytree(source_dir, dest_path)
-                self.after(0, lambda: [messagebox.showinfo("Xong", "Import thành công!"), self.refresh_list()])
+                self.after(0, lambda: [messagebox.showinfo("Done", "Import successful!"), self.refresh_list()])
             
             threading.Thread(target=copy_task, daemon=True).start()
-            messagebox.showinfo("Thông báo", "Đang copy dữ liệu... Vui lòng đợi trong giây lát.")
+            messagebox.showinfo("Notice", "Copying data... Please wait.")
         except Exception as e:
-            messagebox.showerror("Lỗi Import", str(e))
+            messagebox.showerror("Import Error", str(e))
 
     def delete_profile(self, profile_name):
-        confirm = messagebox.askyesno("Xác nhận", f"Xóa vĩnh viễn profile '{profile_name}'?")
+        confirm = messagebox.askyesno("Confirm", f"Permanently delete profile '{profile_name}'?")
         if confirm:
             try:
                 shutil.rmtree(os.path.join(self.profiles_dir, profile_name))
                 self.refresh_list()
             except Exception as e:
-                messagebox.showerror("Lỗi", f"Không thể xóa: {e}")
+                messagebox.showerror("Error", f"Cannot delete: {e}")
 
     def open_browser_setup(self, profile_name):
+        if init_driver_from_profile is None:
+             messagebox.showerror("Error", "Browser setup logic not found (Import failed).")
+             return
+
         profile_path = os.path.join(self.profiles_dir, profile_name)
         
         def run_browser():
             print(f"Opening Setup for {profile_name}...")
-            # Gọi init_driver_from_profile, hàm này cần có trong browser_setup.py
-            # Chú ý: Hàm này phải trả về driver selenium
             driver = init_driver_from_profile(profile_path, log_callback=print)
             
             if driver:
                 try:
                     driver.get("https://gemini.google.com")
-                    # Loop giữ trình duyệt mở
+                    # Loop to keep browser open
                     while True:
                         try:
                             _ = driver.title 

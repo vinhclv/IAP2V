@@ -1,7 +1,7 @@
 import os
-from browser_setup import init_driver_from_profile
+from engine.browser import init_driver_from_profile
 import time
-from tasks_handler import handle_image_to_prompt, handle_prompt_to_video
+from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video
 
 def run_worker_task(profile_folder, file_batch, task_type, assets_path, profiles_dir, stop_event, log_callback):
     """

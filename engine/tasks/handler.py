@@ -1,7 +1,7 @@
 import os
 import shutil
-from image_to_prompt import process_image_to_prompt
-from image_and_prompt_to_video import process_video_batch # Hàm batch mới bạn vừa làm
+from engine.tasks.gemini_vision import process_image_to_prompt
+from engine.tasks.videofx_gen import process_video_batch
 import time
 # --- 1. XỬ LÝ ẢNH -> PROMPT ---
 def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):

@@ -4,9 +4,9 @@ import shutil # <--- [MỚI] Cần import cái này để xóa folder rác
 import undetected_chromedriver as uc
 import random 
 
-ROOT_PATH = os.path.dirname(os.path.abspath(__file__)) 
-ORBITA_PATH = os.path.join(ROOT_PATH, "orbita-browser-141", "chrome.exe")
-DRIVER_PATH = os.path.join(ROOT_PATH, "orbita-browser-141", "chromedriver.exe")
+from config import ORBITA_PATH, DRIVER_PATH
+
+
 DRIVER_INIT_LOCK = threading.Lock()
 def clean_chrome_cache(profile_path):
     """

@@ -7,7 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import random
-from selenium.webdriver.common.action_chains import ActionChains # <--- Nhớ thêm import này
+from selenium.webdriver.common.action_chains import ActionChains 
 
 def robust_click(driver, element):
     try:
@@ -282,7 +282,6 @@ def process_video_batch(driver, file_batch, output_folder, log_callback=print):
             prompt_path = os.path.join(parent_dir, "prompt.txt")
             base_prompt = open(prompt_path, "r", encoding="utf-8").read().strip() if os.path.exists(prompt_path) else "Cinematic"
             human_type(driver, textbox, f"{id_tag} {base_prompt}")
-            
             xpath_btn = "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[2]/div[2]/button[2]"
             wait_btn = WebDriverWait(driver, 20)
             btn_gen = wait_btn.until(EC.element_to_be_clickable((By.XPATH, xpath_btn)))
