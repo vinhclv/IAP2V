@@ -6,7 +6,7 @@ import os
 import concurrent.futures
 
 from config import MAX_RETRIES, DEFAULT_PROFILES
-from utils.file_ops import get_image_status, get_video_status
+from utils.file_ops import get_image_status, get_video_status, get_srt_status
 from engine.worker import run_worker_task
 
 class BatchProcessor:
@@ -19,14 +19,12 @@ class BatchProcessor:
         self.file_lock = threading.Lock()
         self.profile_health = {}
         
-        # Biến cho monitor biết đang làm gì
         self.current_monitoring_info = None 
 
     def clear_task_queue(self):
         with self.task_queue.mutex:
             self.task_queue.queue.clear()
 
-    # --- LOGIC CHẠY BATCH (TỪ Main Cũ) ---
     def run_batch_logic(self, project_queue, loop_type, limit, threads, profiles, finished_callback):
         self.profile_health = {p: 0 for p in profiles}
         
@@ -41,7 +39,6 @@ class BatchProcessor:
             self.update_status(idx, "Running ⏳")
             self.log(f"=== DỰ ÁN {idx+1}/{len(project_queue)}: {os.path.basename(input_path)} ===", "INFO")
             
-            # Gọi hàm xử lý folder
             self.process_one_folder(input_path, output_path, loop_type, limit, threads, profiles)
             
             if self.stop_event.is_set():
@@ -51,19 +48,23 @@ class BatchProcessor:
                 self.log(f"🏁 Xong dự án {idx+1}. Nghỉ 5s...", "SUCCESS")
                 time.sleep(5)
 
-        # Gọi callback khi xong hết
         finished_callback()
 
     def process_one_folder(self, inp, out, loop_type, limit, threads, profiles):
-        # SET Monitor Info
         self.current_monitoring_info = (inp, out, loop_type)
         
         self.clear_task_queue()
         self.log(f"🔍 Bắt đầu xử lý: {os.path.basename(inp)}", "INFO")
 
         while not self.stop_event.is_set():
-            if loop_type == "text": pending, _ = get_image_status(inp, out)
-            else: pending, _ = get_video_status(out)
+            # [UPDATE] Dùng match/case (Switch của Python)
+            match loop_type:
+                case "text":
+                    pending, _ = get_image_status(inp, out)
+                case "srt":
+                    pending, _ = get_srt_status(inp, out)
+                case _:
+                    pending, _ = get_video_status(out)
 
             if not pending:
                 self.log(f"✅ Dự án {os.path.basename(inp)} hoàn thành!", "SUCCESS")
@@ -89,7 +90,6 @@ class BatchProcessor:
             if self.stop_event.is_set(): break
             time.sleep(3)
         
-        # UNSET Monitor Info
         self.current_monitoring_info = None
 
     def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, limit):
@@ -101,16 +101,28 @@ class BatchProcessor:
             candidates = []
             
             with self.file_lock: 
-                for _ in range(limit):
-                    if not self.task_queue.empty(): candidates.append(self.task_queue.get())
-                    else: break
+                if loop_type == "srt":
+                    while not self.task_queue.empty():
+                        candidates.append(self.task_queue.get())
+                else:
+                    for _ in range(limit):
+                        if not self.task_queue.empty(): candidates.append(self.task_queue.get())
+                        else: break
                 
-                if not candidates: return 
+                if not candidates: return
 
-                if loop_type == "text": actual_pending, _ = get_image_status(inp_path, out_path)
-                else: actual_pending, _ = get_video_status(out_path)
-
-                batch = [item for item in candidates if item in actual_pending]
+                match loop_type:
+                    case "text": 
+                        actual_pending, _ = get_image_status(inp_path, out_path)
+                        batch = [item for item in candidates if item in actual_pending]
+                    
+                    case "srt":
+                        actual_pending, _ = get_srt_status(inp_path, out_path)
+                        batch = actual_pending # Ném cả file vào luôn vì srt rất nhỏ
+                        
+                    case _: # video 
+                        actual_pending, _ = get_video_status(out_path)
+                        batch = [item for item in candidates if item in actual_pending]
                 
             if not batch: continue
 
@@ -127,27 +139,22 @@ class BatchProcessor:
             if is_healthy: self.profile_health[profile_name] = 0 
             else: self.profile_health[profile_name] += 1
 
-    # --- MONITOR LOOP ---
     def monitor_loop(self, update_ui_callback):
-        """Chạy ngầm để cập nhật số liệu UI"""
         while True:
-            # Kiểm tra nếu app đang dừng hẳn thì thôi, hoặc check biến stop_event
-            # Ở đây mình check nếu có current_monitoring_info thì mới làm
             if self.current_monitoring_info:
                 try:
                     inp, out, loop_type = self.current_monitoring_info
                     
-                    if loop_type == "text": 
-                        pending, done = get_image_status(inp, out)
-                    else: 
-                        pending, done = get_video_status(out)
+                    match loop_type:
+                        case "text":
+                            pending, completed = get_image_status(inp, out)
+                        case "srt":
+                            pending, completed = get_srt_status(inp, out)
+                        case _:
+                            pending, completed = get_video_status(out)
 
-                    t = len(pending) + len(done)
-                    # Gọi callback về UI (phải dùng root.after ở bên UI lo, hoặc ở đây gọi qua thread an toàn)
-                    # Tkinter không an toàn thread, nên hàm update_ui_callback nên bọc trong root.after
-                    # Ở DashboardTab.update_dashboard_stats mình chưa bọc root.after,
-                    # NHƯNG trong app_window.py mình đã bọc rồi nên ở đây gọi trực tiếp OK.
-                    update_ui_callback(t, len(pending), len(done))
+                    t = len(pending) + len(completed)
+                    update_ui_callback(t, len(pending), len(completed))
                     
                 except Exception as e:
                     print(f"Monitor Error: {e}")

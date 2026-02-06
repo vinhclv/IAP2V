@@ -1,0 +1,12 @@
+{
+    "system": {
+        "max_threads": 3,
+        "loop_limit": 5,
+        "max_retries": 30,
+        "wait_time": 5
+    },
+    "urls": {
+        "gemini_url": "https://gemini.google.com",
+        "videofx_url": "https://labs.google/fx/tools/video-fx"
+    }
+}

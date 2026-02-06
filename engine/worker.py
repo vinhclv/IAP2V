@@ -1,9 +1,9 @@
 import os
 from engine.browser import init_driver_from_profile
 import time
-from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video
+from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt
 
-def run_worker_task(profile_folder, file_batch, task_type, assets_path, profiles_dir, stop_event, log_callback):
+def run_worker_task(profile_folder, batch, task_type, assets_path, profiles_dir, stop_event, log_callback):
     """
     Worker đa năng: Chỉ lo việc quản lý vòng đời (Lifecycle) của Driver.
     Logic nghiệp vụ đẩy sang tasks_handler.
@@ -24,9 +24,9 @@ def run_worker_task(profile_folder, file_batch, task_type, assets_path, profiles
     """
     })
     if not driver:
-        return False, list(file_batch) # Fail ngay từ đầu
+        return False, list(batch) # Fail ngay từ đầu
 
-    failed_items = list(file_batch)
+    failed_items = list(batch)
     is_healthy = True
 
     try:
@@ -34,13 +34,13 @@ def run_worker_task(profile_folder, file_batch, task_type, assets_path, profiles
         # Đây là chỗ giúp bạn mở rộng dễ dàng. Thêm task mới chỉ cần thêm if/else
         
         if task_type == "text":
-            is_healthy, failed_items = handle_image_to_prompt(driver, file_batch, assets_path, task_log)
+            is_healthy, failed_items = handle_image_to_prompt(driver, batch, assets_path, task_log)
             
         elif task_type == "video":
-            is_healthy, failed_items = handle_prompt_to_video(driver, file_batch, assets_path, task_log)
+            is_healthy, failed_items = handle_prompt_to_video(driver, batch, assets_path, task_log)
             
-        elif task_type == "youtube": # Ví dụ mở rộng
-             is_healthy, failed_items = handle_upload_youtube(...)
+        elif task_type == "srt": 
+            is_healthy, failed_items = handle_srt_to_prompt(driver, batch, assets_path, task_log)
              
         else:
             task_log(f"❌ Loại task '{task_type}' chưa được hỗ trợ!", "ERROR")
@@ -49,7 +49,7 @@ def run_worker_task(profile_folder, file_batch, task_type, assets_path, profiles
     except Exception as e:
         task_log(f"🔥 CRASH WORKER: {e}", "ERROR")
         is_healthy = False
-        failed_items = list(file_batch) # Coi như hỏng hết batch này
+        failed_items = list(batch) # Coi như hỏng hết batch này
         
     finally:
         try: driver.quit()

@@ -1,7 +1,8 @@
 import os
 import shutil
-from engine.tasks.gemini_vision import process_image_to_prompt
-from engine.tasks.videofx_gen import process_video_batch
+from engine.tasks.image_to_prompt import process_image_to_prompt
+from engine.tasks.image_and_prompt_to_video import process_video_batch
+from engine.tasks.srt_to_prompt import process_srt_to_prompt
 import time
 # --- 1. XỬ LÝ ẢNH -> PROMPT ---
 def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
@@ -81,9 +82,6 @@ def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
 
 # --- 2. XỬ LÝ PROMPT -> VIDEO (BATCH) ---
 def handle_prompt_to_video(driver, file_batch, assets_path, log_callback):
-    """
-    Xử lý tạo video theo batch, có cơ chế phát hiện lỗi thông minh hơn.
-    """
     # 1. Vào trang & Check Login
     driver.get("https://labs.google/fx/tools/video-fx")
     time.sleep(5)
@@ -144,7 +142,76 @@ def handle_prompt_to_video(driver, file_batch, assets_path, log_callback):
     return True, failed_total
 
 
-# --- 3. (VÍ DỤ MỞ RỘNG) XỬ LÝ UPLOAD YOUTUBE ---
-def handle_upload_youtube(driver, file_batch, assets_path, log_callback):
-    # Code xử lý youtube ở đây...
-    pass
+def handle_srt_to_prompt(driver, batch, _, log_callback):
+    try:
+        if "gemini.google.com" not in driver.current_url:
+            driver.get("https://gemini.google.com/app")
+            time.sleep(5)
+    except Exception as e:
+        log_callback(f"❌ Error opening Gemini page: {e}")
+        return False, batch
+
+    if "accounts.google.com" in driver.current_url:
+        log_callback("❌ Profile logged out -> Stopping.")
+        return False, batch
+
+    failed_list = list(batch)
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 3  # Ngưỡng lỗi liên tiếp (Refresh 3 lần không được thì dừng)
+    CHUNK_SIZE = 5
+
+    # Chia batch thành các chunk
+    chunks = [batch[i:i + CHUNK_SIZE] for i in range(0, len(batch), CHUNK_SIZE)]
+
+    # 2. Duyệt qua từng Chunk
+    for chunk in chunks:
+        
+        # Lấy ID đầu/cuối để log cho dễ nhìn
+        chunk_ids = [item['id'] for item in chunk]
+        
+        # [QUAN TRỌNG] Vòng lặp While để Retry lại chính Chunk này nếu lỗi
+        while True:
+            try:
+                # 4. Gọi hàm xử lý (Gửi Chunk lên -> Nhận kết quả)
+                success = process_srt_to_prompt(driver, chunk, log_callback)
+
+                if success:
+                    log_callback(f"✅ Xong chunk ID: {chunk_ids[0]} - {chunk_ids[-1]}")
+                    
+                    # Xóa các item đã xong khỏi danh sách failed
+                    for item in chunk:
+                        if item in failed_list: 
+                            failed_list.remove(item)
+                    
+                    consecutive_errors = 0 # Reset lỗi
+                    break # [BREAK] Thoát vòng lặp While để sang Chunk tiếp theo
+                
+                else:
+                    # Nếu thất bại
+                    consecutive_errors += 1
+                    log_callback(f"⚠️ Lỗi xử lý chunk {chunk_ids[0]}-{chunk_ids[-1]} (Lần {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
+                    
+                    # Nếu lỗi quá nhiều lần -> Dừng toàn bộ
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                        log_callback("💀 Gemini lỗi liên tiếp -> Đánh dấu Profile hỏng.")
+                        return False, failed_list
+                    
+                    # Refresh trang
+                    log_callback("♻️ Refresh trang và thử lại chunk cũ...")
+                    driver.refresh()
+                    time.sleep(5)
+
+            except Exception as e:
+                log_callback(f"❌ Exception nghiêm trọng: {e}")
+                consecutive_errors += 1
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    return False, failed_list
+                driver.refresh()
+                time.sleep(5)
+
+    # 4. Kiểm tra tổng kết
+    if len(failed_list) == len(batch):
+        log_callback("❌ Thất bại toàn tập (0/{}) -> Profile hỏng.".format(len(batch)))
+        return False, failed_list
+
+    return True, failed_list

@@ -8,9 +8,10 @@ import queue
 
 # Import từ các file khác
 from config import DEFAULT_PROFILES
-from ui.profile_tab import ProfileManagerTab  # File cũ của bạn
-from ui.dashboard_tab import DashboardTab      # File mới tách ra
-from engine.batch_processor import BatchProcessor # Logic xử lý
+from ui.profile_tab import ProfileManagerTab  
+from ui.dashboard_tab import DashboardTab      
+from ui.settings_tab import SettingsTab       
+from engine.batch_processor import BatchProcessor 
 
 class BatchApp:
     def __init__(self, root):
@@ -26,7 +27,6 @@ class BatchApp:
         self.stop_event = threading.Event()
         
         # Khởi tạo Logic Processor
-        # Truyền callback log và update UI vào Processor
         self.processor = BatchProcessor(
             stop_event=self.stop_event,
             log_callback=self.log,
@@ -40,12 +40,16 @@ class BatchApp:
         self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
         
         # TAB 1: Dashboard & Queue
-        self.tab_dashboard = DashboardTab(self.notebook, self) # Truyền self để gọi ngược lại
+        self.tab_dashboard = DashboardTab(self.notebook, self) 
         self.notebook.add(self.tab_dashboard, text="📂 Danh sách Dự án")
         
         # TAB 2: Profiles
         self.tab_profiles = ProfileManagerTab(self.notebook, DEFAULT_PROFILES)
         self.notebook.add(self.tab_profiles, text="👥 Quản lý Profiles")
+
+        # TAB 3: Settings
+        self.tab_settings = SettingsTab(self.notebook)
+        self.notebook.add(self.tab_settings, text="⚙️ Cài đặt")
 
         # LOGS
         frame_log = ttk.LabelFrame(self.root, text="📜 Nhật ký hoạt động", padding=10)
@@ -56,13 +60,12 @@ class BatchApp:
 
     # --- CÁC HÀM GỌI TỪ UI ---
     def on_start_batch(self):
-        # Lấy dữ liệu từ UI
+        # 1. Lấy dữ liệu Queue
         queue_data = self.tab_dashboard.project_queue
         if not queue_data:
             messagebox.showwarning("Trống", "Thêm dự án vào list trước!")
             return
         
-        # Lấy settings
         try:
             limit = int(self.tab_dashboard.spin_limit.get())
             threads = int(self.tab_dashboard.spin_threads.get())
@@ -71,28 +74,32 @@ class BatchApp:
             limit, threads = 5, 3
             mode = "Image ➡ Prompt"
 
-        loop_type = "text" if mode == "Image ➡ Prompt" else "video"
+        if mode == "Image ➡ Prompt":
+            loop_type = "text"   # Logic Image -> Text
+        elif mode == "Prompt ➡ Video":
+            loop_type = "video"  # Logic Video Gen
+        else:
+            loop_type = "srt"    # Logic SRT
 
-        # Lấy profiles
+        # 3. Lấy Profiles
         profiles = self.tab_profiles.get_selected_profiles()
         if not profiles:
             self.log("❌ Chưa chọn Profile!", "ERROR")
             return
 
-        # Setup trạng thái
+        # 4. Setup trạng thái chạy
         self.is_running = True
         self.stop_event.clear()
         self.tab_dashboard.toggle_buttons(is_running=True)
 
-        # Chạy logic ở luồng riêng (Gọi sang engine)
+        # 5. Chạy luồng xử lý chính
         threading.Thread(
             target=self.processor.run_batch_logic,
             args=(queue_data, loop_type, limit, threads, profiles, self.on_batch_finished),
             daemon=True
         ).start()
 
-        # Bắt đầu luồng monitor UI (Gọi sang engine)
-        # Truyền callback để update 3 số liệu trên dashboard
+        # 6. Chạy luồng Monitor (Cập nhật số liệu Realtime)
         threading.Thread(
             target=self.processor.monitor_loop,
             args=(self.tab_dashboard.update_dashboard_stats,),
@@ -103,10 +110,9 @@ class BatchApp:
         if self.is_running:
             self.log("🛑 Đang dừng...", "WARNING")
             self.stop_event.set()
-            self.processor.clear_task_queue() # Clear queue bên trong processor
+            self.processor.clear_task_queue()
 
     def on_batch_finished(self):
-        """Callback khi toàn bộ batch chạy xong"""
         self.is_running = False
         self.stop_event.clear()
         self.root.after(0, lambda: self.tab_dashboard.toggle_buttons(is_running=False))
@@ -116,7 +122,6 @@ class BatchApp:
              messagebox.showinfo("Xong", "Hoàn thành toàn bộ danh sách!")
 
     def update_project_status_callback(self, index, status):
-        """Callback cập nhật trạng thái từng dòng dự án"""
         self.root.after(0, lambda: self.tab_dashboard.update_project_status(index, status))
 
     def _config_log_tags(self):
