@@ -8,32 +8,66 @@ ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 ORBITA_PATH = os.path.join(ROOT_PATH, "orbita-browser-141", "chrome.exe")
 DRIVER_PATH = os.path.join(ROOT_PATH, "orbita-browser-141", "chromedriver.exe")
 DRIVER_INIT_LOCK = threading.Lock()
-
-# --- [MỚI] HÀM DỌN RÁC TRƯỚC KHI CHẠY ---
 def clean_chrome_cache(profile_path):
     """
-    Xóa sạch các folder Cache, GPUCache, Code Cache để giải phóng dung lượng.
-    Giữ lại Cookies và LocalStorage để không bị logout.
+    Dọn dẹp triệt để rác, bao gồm cả Crashpad, File System và IndexedDB.
     """
-    # Vì bạn set --profile-directory=Default, nên rác nằm trong folder Default
+    # 1. Các folder rác nằm ngay ngoài thư mục gốc profile (User Data)
+    root_garbage = [
+        "Crashpad",          # [QUAN TRỌNG] Nơi chứa file dump báo lỗi (rất nặng)
+        "Safe Browsing",     # Dữ liệu check web độc hại (tải lại được)
+        "GrShaderCache",     # Cache đồ họa
+        "ShaderCache", 
+    ]
+    
+    # 2. Các folder rác nằm trong thư mục Default (User Data/Default)
     default_dir = os.path.join(profile_path, "Default")
     
-    garbage_folders = [
-        os.path.join(default_dir, "Cache"),
-        os.path.join(default_dir, "Code Cache"),
-        os.path.join(default_dir, "GPUCache"),
-        os.path.join(default_dir, "ShaderCache"),
-        os.path.join(default_dir, "Service Worker"), # Web AI hay lưu nhiều vào đây
-        os.path.join(default_dir, "Service Worker", "CacheStorage"),
+    default_garbage = [
+        "Cache",
+        "Code Cache",
+        "GPUCache",
+        "DawnCache",         # Cache WebGPU mới
+        "Service Worker",    # [QUAN TRỌNG] Nơi lưu script chạy ngầm
+        "File System",       # [QUAN TRỌNG] Nơi web app lưu video tạm
+        "IndexedDB",         # [CẢNH BÁO] Lưu data web. Xóa cái này sạch nhất nhưng KÉM BỀN LOGOUT hơn. 
+                             # Nếu bị logout, hãy comment dòng này lại.
+        "Local Extension Settings", # Rác extension
+        "Trace",             # Log trace
     ]
 
-    for folder in garbage_folders:
-        if os.path.exists(folder):
+    # Các file rác lẻ tẻ
+    files_to_delete = [
+        "chrome_debug.log",  # Log debug (có thể lên tới vài GB)
+    ]
+
+    print(f"🧹 Bắt đầu dọn dẹp sâu profile: {os.path.basename(profile_path)}...")
+
+    # Xóa folder ở root
+    for folder in root_garbage:
+        full_path = os.path.join(profile_path, folder)
+        if os.path.exists(full_path):
             try:
-                shutil.rmtree(folder, ignore_errors=True)
-                # print(f"🧹 Đã xóa rác: {os.path.basename(folder)}")
+                shutil.rmtree(full_path, ignore_errors=True)
             except: pass
 
+    # Xóa folder trong Default
+    for folder in default_garbage:
+        full_path = os.path.join(default_dir, folder)
+        if os.path.exists(full_path):
+            try:
+                shutil.rmtree(full_path, ignore_errors=True)
+            except: pass
+
+    # Xóa file lẻ
+    for file in files_to_delete:
+        full_path = os.path.join(profile_path, file)
+        if os.path.exists(full_path):
+            try:
+                os.remove(full_path)
+            except: pass
+
+    print("✨ Đã dọn dẹp xong.")
 def init_driver_from_profile(profile_folder_path, log_callback=print, download_dir=None):
     """
     Hàm khởi tạo Driver trực tiếp từ Folder Profile (Không cần JSON).

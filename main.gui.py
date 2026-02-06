@@ -22,8 +22,8 @@ DEFAULT_OUTPUT = os.path.join(BASE_DIR, "assets")
 class BatchApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("🚀 Batch Auto Tool Pro - Multi Project Queue")
-        self.root.geometry("1100x900") # Tăng chiều cao một chút
+        self.root.title("🚀 Batch Auto Tool Pro - Realtime Dashboard")
+        self.root.geometry("1100x900")
         
         try: sv_ttk.set_theme("dark")
         except: pass
@@ -32,24 +32,26 @@ class BatchApp:
         self.stop_event = threading.Event()
         
         self.profile_health = {} 
-        self.MAX_RETRIES = 10     
+        self.MAX_RETRIES = 30    
         
         self.task_queue = queue.Queue()
         self.file_lock = threading.Lock() 
 
         self.selected_mode = tk.StringVar(value="Image ➡ Prompt")
-        
         self.project_queue = [] 
 
+        # --- BIẾN ĐỂ MONITOR THEO DÕI ---
+        # Luồng monitor sẽ nhìn vào biến này để biết đang chạy folder nào
+        self.current_monitoring_info = None # Dạng: (inp, out, loop_type)
+
         self._setup_ui()
-        # Không cần refresh_dashboard định kỳ nữa vì ta update realtime khi chạy
 
     def _setup_ui(self):
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
         
         self.tab_queue = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_queue, text="📂 Danh sách Dự án (Job Queue)")
+        self.notebook.add(self.tab_queue, text="📂 Danh sách Dự án")
         
         self.tab_profiles = ProfileManagerTab(self.notebook, DEFAULT_PROFILES)
         self.notebook.add(self.tab_profiles, text="👥 Quản lý Profiles")
@@ -64,7 +66,7 @@ class BatchApp:
         self._config_log_tags()
 
     def _setup_queue_ui(self):
-        # 1. Khu vực thêm dự án mới
+        # 1. Thêm dự án
         frame_add = ttk.LabelFrame(self.tab_queue, text="➕ Thêm Dự án", padding=10)
         frame_add.pack(fill="x", padx=10, pady=5)
 
@@ -83,69 +85,54 @@ class BatchApp:
         frame_add.columnconfigure(1, weight=1)
         ttk.Button(frame_add, text="⬇ THÊM", command=self.add_project_to_queue).grid(row=0, column=3, rowspan=2, padx=10, sticky="ns")
 
-        # --- 2. DASHBOARD THỐNG KÊ (MỚI THÊM) ---
-        
-        frame_dash = ttk.LabelFrame(self.tab_queue, text="📊 Tiến độ Dự án Hiện tại", padding=15)
+        # 2. DASHBOARD REALTIME
+        frame_dash = ttk.LabelFrame(self.tab_queue, text="📊 Tiến độ Real-time", padding=15)
         frame_dash.pack(fill="x", padx=10, pady=5)
         
-        # Grid layout cho dashboard
         frame_dash.columnconfigure(0, weight=1)
         frame_dash.columnconfigure(1, weight=1)
         frame_dash.columnconfigure(2, weight=1)
 
-        # Cột 1: Tổng
-        f1 = ttk.Frame(frame_dash)
-        f1.grid(row=0, column=0)
+        # Tổng
+        f1 = ttk.Frame(frame_dash); f1.grid(row=0, column=0)
         self.lbl_total = ttk.Label(f1, text="0", font=("Segoe UI", 24, "bold"), foreground="#888888")
-        self.lbl_total.pack()
-        ttk.Label(f1, text="TỔNG FILE").pack()
+        self.lbl_total.pack(); ttk.Label(f1, text="TỔNG FILE").pack()
 
-        # Cột 2: Cần làm (Pending)
-        f2 = ttk.Frame(frame_dash)
-        f2.grid(row=0, column=1)
-        self.lbl_pending = ttk.Label(f2, text="0", font=("Segoe UI", 32, "bold"), foreground="#ffaa00") # Màu cam
-        self.lbl_pending.pack()
-        ttk.Label(f2, text="CẦN LÀM").pack()
+        # Pending
+        f2 = ttk.Frame(frame_dash); f2.grid(row=0, column=1)
+        self.lbl_pending = ttk.Label(f2, text="0", font=("Segoe UI", 32, "bold"), foreground="#ffaa00")
+        self.lbl_pending.pack(); ttk.Label(f2, text="CẦN LÀM").pack()
 
-        # Cột 3: Đã xong (Done)
-        f3 = ttk.Frame(frame_dash)
-        f3.grid(row=0, column=2)
-        self.lbl_done = ttk.Label(f3, text="0", font=("Segoe UI", 24, "bold"), foreground="#00cc6a") # Màu xanh lá
-        self.lbl_done.pack()
-        ttk.Label(f3, text="ĐÃ XONG").pack()
-        # ----------------------------------------
+        # Done
+        f3 = ttk.Frame(frame_dash); f3.grid(row=0, column=2)
+        self.lbl_done = ttk.Label(f3, text="0", font=("Segoe UI", 24, "bold"), foreground="#00cc6a")
+        self.lbl_done.pack(); ttk.Label(f3, text="ĐÃ XONG").pack()
 
-        # 3. Danh sách dự án
+        # 3. Danh sách
         frame_list = ttk.LabelFrame(self.tab_queue, text="📋 Hàng chờ", padding=10)
         frame_list.pack(fill="both", expand=True, padx=10, pady=5)
 
         columns = ("stt", "input", "output", "status")
         self.tree = ttk.Treeview(frame_list, columns=columns, show="headings", height=6)
         self.tree.heading("stt", text="#")
-        self.tree.heading("input", text="Thư mục Input")
-        self.tree.heading("output", text="Thư mục Output")
+        self.tree.heading("input", text="Input")
+        self.tree.heading("output", text="Output")
         self.tree.heading("status", text="Trạng thái")
-        
         self.tree.column("stt", width=30, anchor="center")
         self.tree.column("input", width=350)
         self.tree.column("output", width=350)
         self.tree.column("status", width=100, anchor="center")
-        
         self.tree.pack(side="left", fill="both", expand=True)
+        
         sb = ttk.Scrollbar(frame_list, orient="vertical", command=self.tree.yview)
-        sb.pack(side="right", fill="y")
-        self.tree.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y"); self.tree.configure(yscrollcommand=sb.set)
 
-        # Nút thao tác list
-        frame_act = ttk.Frame(frame_list)
-        frame_act.pack(side="bottom", fill="x", pady=5)
+        frame_act = ttk.Frame(frame_list); frame_act.pack(side="bottom", fill="x", pady=5)
         ttk.Button(frame_act, text="❌ Xóa", command=self.remove_selected_project).pack(side="right")
         ttk.Button(frame_act, text="🧹 Xóa hết", command=self.clear_all_projects).pack(side="right", padx=5)
 
-        # 4. Cấu hình & Chạy
-        frame_ctrl = ttk.Frame(self.tab_queue, padding=10)
-        frame_ctrl.pack(fill="x")
-        
+        # 4. Controls
+        frame_ctrl = ttk.Frame(self.tab_queue, padding=10); frame_ctrl.pack(fill="x")
         ttk.Label(frame_ctrl, text="Batch:").pack(side="left")
         self.spin_limit = ttk.Spinbox(frame_ctrl, from_=1, to=50, width=5); self.spin_limit.set(5)
         self.spin_limit.pack(side="left", padx=5)
@@ -155,20 +142,17 @@ class BatchApp:
         self.spin_threads.pack(side="left", padx=5)
 
         ttk.Separator(frame_ctrl, orient="vertical").pack(side="left", fill="y", padx=15)
-        
         self.cbo_mode = ttk.Combobox(frame_ctrl, textvariable=self.selected_mode, state="readonly", width=18)
         self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video")
         self.cbo_mode.pack(side="left", padx=5)
 
         self.btn_run = ttk.Button(frame_ctrl, text="▶ CHẠY LIST", style="Accent.TButton", command=self.on_start_batch)
         self.btn_run.pack(side="left", padx=20)
-        
         self.btn_stop = ttk.Button(frame_ctrl, text="🛑 DỪNG", command=self.stop_process, state="disabled")
         self.btn_stop.pack(side="right")
 
-    # --- HELPER UI ---
+    # --- UI HELPERS ---
     def update_dashboard_stats(self, total, pending, done):
-        """Hàm cập nhật giao diện Dashboard an toàn từ luồng phụ"""
         def _update():
             self.lbl_total.config(text=f"{total}")
             self.lbl_pending.config(text=f"{pending}")
@@ -188,13 +172,11 @@ class BatchApp:
     def remove_selected_project(self):
         sel = self.tree.selection()
         if sel:
-            idx = self.tree.index(sel[0])
-            del self.project_queue[idx]
+            del self.project_queue[self.tree.index(sel[0])]
             self.refresh_treeview()
 
     def clear_all_projects(self):
-        self.project_queue = []
-        self.refresh_treeview()
+        self.project_queue = []; self.refresh_treeview()
 
     def refresh_treeview(self):
         for item in self.tree.get_children(): self.tree.delete(item)
@@ -205,7 +187,35 @@ class BatchApp:
         self.project_queue[index]["status"] = status
         self.root.after(0, self.refresh_treeview)
 
-    # --- LOGIC WORKER ---
+    # --- NEW: LUỒNG GIÁM SÁT REALTIME ---
+    def _start_monitor_thread(self):
+        """Khởi động luồng giám sát riêng biệt"""
+        threading.Thread(target=self._monitor_loop, daemon=True).start()
+
+    def _monitor_loop(self):
+        """Vòng lặp chạy ngầm, cập nhật UI mỗi 2 giây"""
+        while self.is_running:
+            # Chỉ cập nhật nếu đang có dự án chạy (biến current_monitoring_info có dữ liệu)
+            if self.current_monitoring_info:
+                try:
+                    inp, out, loop_type = self.current_monitoring_info
+                    
+                    # Quét nhanh ổ đĩa
+                    if loop_type == "text": 
+                        pending, done = get_image_status(inp, out)
+                    else: 
+                        pending, done = get_video_status(out)
+
+                    # Cập nhật UI
+                    t = len(pending) + len(done)
+                    self.update_dashboard_stats(t, len(pending), len(done))
+                    
+                except Exception as e:
+                    print(f"Monitor Error: {e}")
+            
+            time.sleep(2)
+
+    # --- WORKER LOGIC ---
     def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, limit):
         while not self.stop_event.is_set():
             fails = self.profile_health.get(profile_name, 0)
@@ -243,24 +253,17 @@ class BatchApp:
             else: self.profile_health[profile_name] += 1
 
     def process_one_folder(self, inp, out, loop_type, limit, threads, profiles):
-        # Reset Queue
-        with self.task_queue.mutex: self.task_queue.queue.clear()
+        # 1. THÔNG BÁO CHO MONITOR BIẾT ĐỂ BẮT ĐẦU THEO DÕI FOLDER NÀY
+        self.current_monitoring_info = (inp, out, loop_type)
         
-        self.log(f"🔍 Đang quét: {os.path.basename(inp)}", "INFO")
+        with self.task_queue.mutex: self.task_queue.queue.clear()
+        self.log(f"🔍 Bắt đầu xử lý: {os.path.basename(inp)}", "INFO")
 
-        # --- VÒNG LẶP XỬ LÝ DỰ ÁN ---
         while not self.stop_event.is_set():
-            # 1. Lấy trạng thái thực tế (Pending & Done)
-            if loop_type == "text": 
-                pending, done = get_image_status(inp, out)
-            else: 
-                pending, done = get_video_status(out)
+            # Quét để lấy việc
+            if loop_type == "text": pending, _ = get_image_status(inp, out)
+            else: pending, _ = get_video_status(out)
 
-            # 2. CẬP NHẬT DASHBOARD NGAY LẬP TỨC
-            total_files = len(pending) + len(done)
-            self.update_dashboard_stats(total_files, len(pending), len(done))
-
-            # 3. Điều kiện dừng
             if not pending:
                 self.log(f"✅ Dự án {os.path.basename(inp)} hoàn thành!", "SUCCESS")
                 break 
@@ -269,22 +272,26 @@ class BatchApp:
             if not living_profiles:
                 self.log("❌ Hết Profile sống!", "ERROR"); break
 
-            # 4. Nạp Queue
             while not self.task_queue.empty(): self.task_queue.get()
             for f in pending: self.task_queue.put(f)
 
             cur_threads = min(threads, len(living_profiles))
             
-            # 5. Chạy Executor
             with concurrent.futures.ThreadPoolExecutor(max_workers=cur_threads) as executor:
                 futures = []
                 for p_name in living_profiles:
                     f = executor.submit(self.continuous_profile_runner, p_name, loop_type, inp, out, limit)
                     futures.append(f)
+                
+                # CHỖ NÀY LÀ CHỖ GÂY ĐỨNG UI CŨ (Blocking Wait)
+                # Nhưng giờ đã có luồng Monitor chạy riêng nên UI vẫn nhảy số ầm ầm
                 concurrent.futures.wait(futures)
 
             if self.stop_event.is_set(): break
             time.sleep(3)
+        
+        # Kết thúc folder này -> Dừng monitor folder này
+        self.current_monitoring_info = None
 
     def run_batch_logic(self, loop_type):
         try: limit = int(self.spin_limit.get())
@@ -298,6 +305,9 @@ class BatchApp:
 
         self.profile_health = {p: 0 for p in profiles}
 
+        # --- BẮT ĐẦU LUỒNG MONITOR ---
+        self._start_monitor_thread()
+
         self.log(f"🚀 BẮT ĐẦU CHẠY: {len(self.project_queue)} DỰ ÁN", "INFO")
 
         for idx, project in enumerate(self.project_queue):
@@ -309,7 +319,6 @@ class BatchApp:
             self.update_project_status(idx, "Running ⏳")
             self.log(f"=== DỰ ÁN {idx+1}/{len(self.project_queue)}: {os.path.basename(input_path)} ===", "INFO")
             
-            # Gọi hàm xử lý chặn
             self.process_one_folder(input_path, output_path, loop_type, limit, threads, profiles)
             
             if self.stop_event.is_set():
