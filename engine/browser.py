@@ -3,7 +3,7 @@ import threading
 import shutil # <--- [MỚI] Cần import cái này để xóa folder rác
 import undetected_chromedriver as uc
 import random 
-
+import json
 from config import ORBITA_PATH, DRIVER_PATH
 
 
@@ -68,6 +68,61 @@ def clean_chrome_cache(profile_path):
             except: pass
 
     print("✨ Đã dọn dẹp xong.")
+
+def clean_preferences_bloat(profile_path):
+    """
+    Hàm dọn dẹp file Preferences nếu nó phình to quá 50MB.
+    Đặc biệt xử lý Extension Orbita bị lỗi log.
+    """
+    pref_file = os.path.join(profile_path, "Default", "Preferences")
+    
+    if not os.path.exists(pref_file): return
+
+    try:
+        # 1. Chỉ xử lý nếu file lớn hơn 10MB (để tối ưu tốc độ)
+        file_size_mb = os.path.getsize(pref_file) / (1024 * 1024)
+        if file_size_mb < 10: 
+            return 
+
+        print(f"📉 Phát hiện file Preferences nặng {file_size_mb:.2f} MB. Đang nén lại...")
+
+        with open(pref_file, 'r', encoding='utf-8', errors='ignore') as f:
+            data = json.load(f)
+        
+        dirty = False # Cờ đánh dấu xem có thay đổi gì không
+
+        # 2. Xử lý Extension rác (Orbita/Gologin)
+        if 'extensions' in data and 'settings' in data['extensions']:
+            settings = data['extensions']['settings']
+            # ID của Orbita/Gologin và các extension hay gây lỗi
+            target_ids = [
+                "fignfifoniblkonapihmkfakmlgkbkcf", # Orbita
+                # Thêm ID extension khác nếu sau này bị lại
+            ]
+            
+            # Quét extension nào nặng > 1MB thì reset
+            for ext_id in list(settings.keys()):
+                # Check size string log extension
+                if len(str(settings[ext_id])) > 1024 * 1024: # > 1MB text
+                    settings[ext_id] = {} # Reset về rỗng
+                    dirty = True
+                    print(f"   🧹 Đã reset data extension: {ext_id}")
+
+        # 3. Xóa DevTools & Metrics rác
+        if 'devtools' in data:
+            del data['devtools']
+            dirty = True
+        
+        # 4. Lưu lại nếu có thay đổi
+        if dirty or file_size_mb > 50: # Luôn lưu lại để nén dòng (remove whitespace)
+            with open(pref_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, separators=(',', ':'))
+            print(f"✅ Đã tối ưu xong Preferences.")
+
+    except Exception as e:
+        print(f"⚠️ Lỗi nhẹ khi dọn Preferences: {e}")
+
+
 def init_driver_from_profile(profile_folder_path, log_callback=print, download_dir=None):
     """
     Hàm khởi tạo Driver trực tiếp từ Folder Profile (Không cần JSON).
@@ -82,6 +137,7 @@ def init_driver_from_profile(profile_folder_path, log_callback=print, download_d
     
     # --- [MỚI] GỌI HÀM DỌN DẸP TRƯỚC KHI MỞ ---
     log_callback(f"🧹 Đang dọn dẹp Cache cũ cho profile: {folder_name}...")
+    clean_preferences_bloat(profile_folder_path)
     clean_chrome_cache(profile_folder_path)
 
     log_callback(f"🚀 Khởi động Orbita Profile: {folder_name}")
