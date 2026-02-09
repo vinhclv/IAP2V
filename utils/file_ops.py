@@ -230,3 +230,64 @@ def get_2_image_prompt_status(img_dir, output_dir):
         print(f"❌ Lỗi quét cặp ảnh: {e}")
 
     return pending, completed
+
+def get_srt_image_status(srt_path, output_dir):
+    """
+    Đọc file SRT và kiểm tra xem ảnh tương ứng đã được tạo chưa.
+    Logic: Input (SRT) -> Output (Folder chứa ảnh 1.jpg, 2.jpg...)
+    """
+    pending = []
+    completed = []
+
+    if not os.path.exists(srt_path):
+        return [], []
+
+    try:
+        # 1. Đọc nội dung SRT
+        with open(srt_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Regex tách các đoạn sub (Lấy ID và Text)
+        # Group 1: ID
+        # Group 2: Timestamp (bỏ qua)
+        # Group 3: Text nội dung
+        pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\d+\n|\Z)', re.DOTALL)
+        matches = pattern.findall(content)
+
+        # 2. Xác định thư mục chứa ảnh đầu ra
+        # Tên project lấy theo tên file SRT (ví dụ: movie.srt -> movie)
+        project_name = os.path.splitext(os.path.basename(srt_path))[0]
+        images_dir = os.path.join(output_dir, project_name)
+
+        # 3. Duyệt qua từng dòng sub để tạo Task
+        for idx, _, text in matches:
+            idx = str(idx).strip()
+            
+            # Làm sạch text để dùng làm Prompt
+            # Xóa xuống dòng, xóa tag HTML nếu có
+            clean_text = text.strip().replace('\n', ' ')
+            clean_text = re.sub(r'<.*?>', '', clean_text) 
+
+            # Đường dẫn file ảnh mong đợi (ví dụ: output/movie/1.jpg)
+            image_filename = f"{idx}.jpg"
+            image_path = os.path.join(images_dir, image_filename)
+
+            # Tạo object task để Worker sử dụng ngay
+            task_item = {
+                "id": idx,
+                "prompt": clean_text,         # Dùng trực tiếp text sub làm prompt
+                "save_path": image_path,      # Đường dẫn file ảnh đích
+                "output_folder": images_dir,  # Thư mục chứa ảnh (để Worker os.makedirs)
+            }
+
+            # 4. Kiểm tra trạng thái
+            # File phải tồn tại và dung lượng > 0 mới tính là xong
+            if os.path.exists(image_path) and os.path.getsize(image_path) > 0:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+
+    except Exception as e:
+        print(f"❌ Lỗi xử lý file SRT: {e}")
+
+    return pending, completed   

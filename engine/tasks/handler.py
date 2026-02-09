@@ -5,6 +5,7 @@ from engine.tasks.image_and_prompt_to_video import process_video_batch
 from engine.tasks.srt_to_prompt import process_srt_to_prompt
 from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
+from engine.tasks.srt_to_image import process_srt_item_to_image
 import time
 
 def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
@@ -349,6 +350,80 @@ def handle_2_image_to_prompt(driver, batch, assets_path, log_callback):
     # 4. Kiểm tra tổng kết
     if len(failed_list) == len(batch):
         log_callback("❌ Thất bại toàn tập.")
+        return False, failed_list
+
+    return True, failed_list
+
+def handle_srt_to_image(driver, batch, assets_path, log_callback):
+    """
+    Xử lý danh sách task từ SRT -> Image.
+    Input: batch là danh sách các dict {'id', 'prompt', 'save_path', ...}
+    """
+    # 1. Vào trang & Check Login
+    try:
+        # URL custom bạn cung cấp
+        driver.get("https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing")
+        time.sleep(5)
+    except Exception as e:
+        log_callback(f"❌ Lỗi mở trang: {e}")
+        return False, batch
+
+    if "accounts.google.com" in driver.current_url:
+        log_callback("❌ Profile bị logout -> Dừng.")
+        return False, batch
+
+    failed_list = list(batch)
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 5 
+    
+    # --- 2. VÒNG LẶP XỬ LÝ TỪNG DÒNG SUB ---
+    for item in batch:
+        # Lấy dữ liệu từ item (được tạo ra bởi get_srt_image_status)
+        stt = item['id']
+        text_content = item['prompt'] # Đây là nội dung sub
+        save_path = item['save_path']
+        output_folder = item['output_folder']
+        
+        # Hiển thị log
+        short_text = (text_content[:40] + '..') if len(text_content) > 40 else text_content
+        log_callback(f"▶️ [SRT] STT {stt}: {short_text}")
+        
+        try:
+            # Tạo thư mục nếu chưa có
+            os.makedirs(output_folder, exist_ok=True)
+            
+            # Gọi hàm xử lý core dành riêng cho SRT
+            success = process_srt_item_to_image(driver, item, log_callback)
+
+            if success:
+                log_callback(f"✅ Xong STT {stt}")
+                if item in failed_list: failed_list.remove(item)
+                consecutive_errors = 0 
+                
+                # Refresh định kỳ để tránh lag (cứ 30 ảnh refresh 1 lần)
+                if int(stt) % 30 == 0:
+                    driver.refresh()
+                    time.sleep(4)
+            else:
+                consecutive_errors += 1
+                log_callback(f"⚠️ Lỗi STT {stt} ({consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
+                
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    log_callback("💀 Lỗi liên tiếp quá nhiều -> Dừng.")
+                    return False, failed_list
+                
+                driver.refresh()
+                time.sleep(5)
+
+        except Exception as e:
+            log_callback(f"❌ Exception tại STT {stt}: {e}")
+            consecutive_errors += 1
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                return False, failed_list
+            driver.refresh()
+            time.sleep(5)
+
+    if len(failed_list) == len(batch):
         return False, failed_list
 
     return True, failed_list

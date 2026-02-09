@@ -96,7 +96,7 @@ class DashboardTab(ttk.Frame):
         self.selected_mode = tk.StringVar(value="Image ➡ Prompt")
         self.cbo_mode = ttk.Combobox(frame_ctrl, textvariable=self.selected_mode, state="readonly", width=20)
         
-        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", "Prompt ➡ Image", "2_Image ➡ Prompt")
+        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", "Prompt ➡ Image", "2_Image ➡ Prompt", "Srt -> Image")
         self.cbo_mode.pack(side="left", padx=5)
         
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
@@ -124,9 +124,9 @@ class DashboardTab(ttk.Frame):
         """Hàm chọn Input thông minh dựa trên Mode"""
         mode = self.selected_mode.get()
         
-        if mode == "SRT ➡ Prompt" or mode == "Prompt ➡ Image":
+        if mode == "SRT ➡ Prompt" or mode == "Prompt ➡ Image" or mode == "Srt -> Image":
             # Nếu là mode SRT -> Chọn File .srt
-            if mode == "SRT ➡ Prompt":
+            if mode == "SRT ➡ Prompt" or mode == "Srt -> Image":
                 title = "Chọn file phụ đề SRT"
                 filetypes = [("SRT Files", "*.srt"), ("All Files", "*.*")]
             else:
