@@ -4,8 +4,9 @@ from engine.tasks.image_to_prompt import process_image_to_prompt
 from engine.tasks.image_and_prompt_to_video import process_video_batch
 from engine.tasks.srt_to_prompt import process_srt_to_prompt
 from engine.tasks.prompt_to_image import process_prompt_to_image
+from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
 import time
-# --- 1. XỬ LÝ ẢNH -> PROMPT ---
+
 def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
     """
     Xử lý danh sách ảnh để tạo prompt.
@@ -268,3 +269,86 @@ def handle_prompt_to_image(driver, batch, assets_path, log_callback):
         return False, failed_total
 
     return True, failed_total
+
+def handle_2_image_to_prompt(driver, batch, assets_path, log_callback):
+    """
+    Xử lý danh sách cặp ảnh (1-2, 2-3...) để tạo prompt nối.
+    """
+    # 1. Vào trang & Check Login
+    try:
+        # Dùng URL này để vào thẳng giao diện chat mới (hoặc url mặc định)
+        if "gemini.google.com" not in driver.current_url:
+            driver.get("https://gemini.google.com/app")
+            time.sleep(5)
+    except Exception as e:
+        log_callback(f"❌ Lỗi mở trang Gemini: {e}")
+        return False, batch
+
+    if "accounts.google.com" in driver.current_url:
+        log_callback("❌ Profile bị logout -> Dừng.")
+        return False, batch
+
+    failed_list = list(batch)
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 5 
+    
+    for item in batch:
+        pair_id = item['id']           # Ví dụ: "1-2"
+        img1_src = item['img1_path']
+        img2_src = item['img2_path']
+        dest_folder = item['output_folder']
+        prompt_file = item['prompt_file']
+        
+        log_callback(f"▶️ [Pair] Xử lý cặp: {pair_id} ({os.path.basename(img1_src)} & {os.path.basename(img2_src)})")
+        
+        try:
+            # 1. Chuẩn bị thư mục và Copy ảnh
+            os.makedirs(dest_folder, exist_ok=True)
+            
+            # Copy 2 ảnh vào folder đích (để người dùng dễ quản lý sau này)
+            dest_img1 = os.path.join(dest_folder, os.path.basename(img1_src))
+            dest_img2 = os.path.join(dest_folder, os.path.basename(img2_src))
+            
+            if not os.path.exists(dest_img1): shutil.copy2(img1_src, dest_img1)
+            if not os.path.exists(dest_img2): shutil.copy2(img2_src, dest_img2)
+            
+            # 2. [SKIP] Kiểm tra nếu đã có prompt.txt
+            if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 10:
+                log_callback(f"⏭️ Đã có prompt cặp {pair_id} -> Bỏ qua.")
+                if item in failed_list: failed_list.remove(item)
+                consecutive_errors = 0
+                continue
+
+            # 3. Gọi hàm xử lý core (Upload 2 ảnh và xin prompt)
+            # Lưu ý: Chúng ta gửi đường dẫn file gốc để upload cho nhanh
+            success = process_pair_images_to_prompt(driver, img1_src, img2_src, dest_folder, log_callback)
+
+            if success:
+                log_callback(f"✅ Xong cặp: {pair_id}")
+                if item in failed_list: failed_list.remove(item)
+                consecutive_errors = 0 
+            else:
+                consecutive_errors += 1
+                log_callback(f"⚠️ Lỗi xử lý ({consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}): {pair_id}")
+                
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    log_callback("💀 Gemini lỗi liên tiếp -> Dừng Profile.")
+                    return False, failed_list
+                
+                driver.refresh()
+                time.sleep(5)
+
+        except Exception as e:
+            log_callback(f"❌ Exception nghiêm trọng tại cặp {pair_id}: {e}")
+            consecutive_errors += 1
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                return False, failed_list
+            driver.refresh()
+            time.sleep(5)
+
+    # 4. Kiểm tra tổng kết
+    if len(failed_list) == len(batch):
+        log_callback("❌ Thất bại toàn tập.")
+        return False, failed_list
+
+    return True, failed_list

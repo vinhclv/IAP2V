@@ -80,6 +80,8 @@ class BatchApp:
             loop_type = "prompt_video"  # Logic Video Gen
         elif mode == "Prompt ➡ Image":
             loop_type = "prompt_image"  # Logic Image Gen
+        elif mode == "2_Image ➡ Prompt":
+            loop_type = "2_image_prompt"   # Logic 2Image -> Text  
         else:
             loop_type = "srt_prompt"    # Logic SRT
 

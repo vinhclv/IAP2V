@@ -166,3 +166,67 @@ def get_prompt_image_status(prompt_json_path, output_root_dir):
         print(f"❌ Lỗi đọc JSON Prompt Image: {e}")
         
     return pending, completed
+
+def get_2_image_prompt_status(img_dir, output_dir):
+    """
+    Quét folder ảnh, tạo cặp ảnh liên tiếp (1-2, 2-3...)
+    Kiểm tra xem đã có prompt.txt cho cặp đó chưa.
+    """
+    pending = []
+    completed = []
+    
+    if not os.path.exists(img_dir):
+        return [], []
+
+    try:
+        # 1. Lấy danh sách file ảnh và SẮP XẾP SỐ HỌC
+        # (Để tránh trường hợp sort sai kiểu string: 1, 10, 11, 2...)
+        valid_exts = ['.jpg', '.jpeg', '.png', '.webp']
+        files = [f for f in os.listdir(img_dir) if os.path.splitext(f)[1].lower() in valid_exts]
+        
+        # Sắp xếp theo số (giả sử tên file là 1.jpg, 2.jpg...)
+        try:
+            files.sort(key=lambda f: int(os.path.splitext(f)[0]))
+        except ValueError:
+            # Fallback nếu tên file không phải số (ví dụ: frame_01.jpg)
+            files.sort()
+
+        if len(files) < 2:
+            return [], [] # Không đủ 2 ảnh để tạo cặp
+
+        # 2. Duyệt qua danh sách để tạo cặp (Sliding Window)
+        # Chạy từ 0 đến N-1
+        for i in range(len(files) - 1):
+            img1_name = files[i]     # Ví dụ: 1.jpg
+            img2_name = files[i+1]   # Ví dụ: 2.jpg
+            
+            # Lấy tên file không đuôi để đặt tên folder (1, 2)
+            id1 = os.path.splitext(img1_name)[0]
+            id2 = os.path.splitext(img2_name)[0]
+            
+            pair_id = f"{id1}-{id2}" # Tên folder: 1-2
+            
+            # Đường dẫn Output
+            sub_folder = os.path.join(output_dir, pair_id)
+            prompt_file = os.path.join(sub_folder, "prompt.txt")
+            
+            # Tạo Task Object
+            task_item = {
+                "id": pair_id,           # ID cặp: "1-2"
+                "img1_path": os.path.join(img_dir, img1_name), # Đường dẫn ảnh 1
+                "img2_path": os.path.join(img_dir, img2_name), # Đường dẫn ảnh 2
+                "output_folder": sub_folder,                   # Folder đích
+                "prompt_file": prompt_file,                    # File kết quả mong muốn
+            }
+
+            # 3. Kiểm tra trạng thái
+            # Coi như hoàn thành nếu file prompt.txt tồn tại và có dữ liệu (>10 bytes)
+            if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 10:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+
+    except Exception as e:
+        print(f"❌ Lỗi quét cặp ảnh: {e}")
+
+    return pending, completed

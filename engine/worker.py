@@ -1,7 +1,7 @@
 import os
 from engine.browser import init_driver_from_profile
 import time
-from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt, handle_prompt_to_image
+from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt, handle_prompt_to_image, handle_2_image_to_prompt
 
 def run_worker_task(profile_folder, batch, task_type, assets_path, profiles_dir, stop_event, log_callback):
     """
@@ -44,6 +44,10 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, profiles_dir,
 
         elif task_type == "prompt_image":
             is_healthy, failed_items = handle_prompt_to_image(driver, batch, assets_path, task_log)
+            
+        elif task_type == "2_image_prompt":
+            is_healthy, failed_items = handle_2_image_to_prompt(driver, batch, assets_path, task_log)
+
         else:
             task_log(f"❌ Loại task '{task_type}' chưa được hỗ trợ!", "ERROR")
             return True, failed_items # Trả về nhưng không đánh dấu hỏng profile

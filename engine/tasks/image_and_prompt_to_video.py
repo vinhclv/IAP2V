@@ -32,6 +32,7 @@ def human_click_offset(driver, element):
     actions.move_to_element_with_offset(element, offset_x, offset_y)
     actions.pause(random.uniform(0.2, 0.5))
     actions.click().perform()
+
 def human_type(driver, element, text):
     element.click()
     time.sleep(random.uniform(0.5, 1.0))
@@ -60,6 +61,8 @@ def human_type(driver, element, text):
             time.sleep(random.uniform(0.2, 0.5))
 
     time.sleep(random.uniform(0.5, 1.0))
+
+    
 # --- HÀM 2: CẤU HÌNH GIAO DIỆN (FULL OPTION: MODE + RATIO + QUANTITY) ---
 def setup_video_creation_mode(driver):
     wait = WebDriverWait(driver, 5) 

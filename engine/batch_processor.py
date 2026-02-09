@@ -6,7 +6,7 @@ import os
 import concurrent.futures
 
 from config import MAX_RETRIES, DEFAULT_PROFILES
-from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status
+from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status
 from engine.worker import run_worker_task
 
 class BatchProcessor:
@@ -64,6 +64,8 @@ class BatchProcessor:
                     pending, _ = get_srt_prompt_status(inp, out)
                 case "prompt_image":
                     pending, _ = get_prompt_image_status(inp, out)
+                case "2_image_prompt":
+                    pending, _ = get_2_image_prompt_status(inp, out)
                 case _:
                     pending, _ = get_prompt_video_status(out)
 
@@ -122,6 +124,9 @@ class BatchProcessor:
                     case "prompt_image":
                         actual_pending, _ = get_prompt_image_status(inp_path, out_path)
                         batch = [item for item in candidates if item in actual_pending]
+                    case "2_image_prompt":
+                        actual_pending, _ = get_2_image_prompt_status(inp_path, out_path)
+                        batch = [item for item in candidates if item in actual_pending]
                     case _: # prompt_video 
                         actual_pending, _ = get_prompt_video_status(out_path)
                         batch = [item for item in candidates if item in actual_pending]
@@ -154,6 +159,8 @@ class BatchProcessor:
                             pending, completed = get_srt_prompt_status(inp, out)
                         case "prompt_image":
                             pending, completed = get_prompt_image_status(inp, out)
+                        case "2_image_prompt":
+                            pending, completed = get_2_image_prompt_status(inp, out)
                         case _: # prompt_video
                             pending, completed = get_prompt_video_status(out)
 

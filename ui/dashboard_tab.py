@@ -96,7 +96,7 @@ class DashboardTab(ttk.Frame):
         self.selected_mode = tk.StringVar(value="Image ➡ Prompt")
         self.cbo_mode = ttk.Combobox(frame_ctrl, textvariable=self.selected_mode, state="readonly", width=20)
         
-        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", "Prompt ➡ Image")
+        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", "Prompt ➡ Image", "2_Image ➡ Prompt")
         self.cbo_mode.pack(side="left", padx=5)
         
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
