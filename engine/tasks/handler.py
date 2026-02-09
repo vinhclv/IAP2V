@@ -3,6 +3,7 @@ import shutil
 from engine.tasks.image_to_prompt import process_image_to_prompt
 from engine.tasks.image_and_prompt_to_video import process_video_batch
 from engine.tasks.srt_to_prompt import process_srt_to_prompt
+from engine.tasks.prompt_to_image import process_prompt_to_image
 import time
 # --- 1. XỬ LÝ ẢNH -> PROMPT ---
 def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
@@ -80,7 +81,6 @@ def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
     # Nếu làm được ít nhất 1 cái (hoặc skip do đã có) -> Profile OK
     return True, failed_list
 
-# --- 2. XỬ LÝ PROMPT -> VIDEO (BATCH) ---
 def handle_prompt_to_video(driver, file_batch, assets_path, log_callback):
     # 1. Vào trang & Check Login
     driver.get("https://labs.google/fx/tools/video-fx")
@@ -140,7 +140,6 @@ def handle_prompt_to_video(driver, file_batch, assets_path, log_callback):
         return False, failed_total 
 
     return True, failed_total
-
 
 def handle_srt_to_prompt(driver, batch, _, log_callback):
     try:
@@ -215,3 +214,57 @@ def handle_srt_to_prompt(driver, batch, _, log_callback):
         return False, failed_list
 
     return True, failed_list
+
+def handle_prompt_to_image(driver, batch, assets_path, log_callback):
+    """
+    Xử lý Prompt -> Image. Quản lý vòng lặp và điều phối lỗi.
+    """
+    # 1. Vào trang & Check Login
+    try:
+        if "gemini.google.com" not in driver.current_url:
+            driver.get("https://gemini.google.com/gem/475dfb0a0b56?usp=sharing")
+            time.sleep(5)
+    except Exception as e:
+        log_callback(f"❌ Lỗi mở trang: {e}")
+        return False, batch
+
+    if "accounts.google.com" in driver.current_url:
+        log_callback("❌ Profile bị logout -> Dừng.")
+        return False, batch
+
+    failed_total = list(batch) # Giả định ban đầu là tất cả đều lỗi
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 7 # Ngưỡng lỗi liên tiếp để hủy Profile
+
+    # 2. Chạy vòng lặp xử lý từng Item đơn lẻ
+    for item in batch:
+        stt = item['id']
+        log_callback(f"🎨 [Image] Đang tạo ảnh cho STT {stt}...")
+
+        # Gọi hàm xử lý đơn lẻ từ gemini_vision.py
+        success = process_prompt_to_image(driver, item, log_callback)
+
+        if success:
+            log_callback(f"✅ Xong ảnh STT: {stt}")
+            if item in failed_total:
+                failed_total.remove(item)
+            consecutive_errors = 0 # Reset lỗi liên tiếp
+        else:
+            consecutive_errors += 1
+            log_callback(f"⚠️ Lỗi xử lý STT {stt} ({consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
+            
+            # Nếu lỗi liên tiếp quá nhiều -> Dừng Profile ngay lập tức
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                log_callback("💀 Profile lỗi liên tiếp quá nhiều -> Dừng.")
+                return False, failed_total
+            
+            # Refresh trang để giải phóng bộ nhớ hoặc fix kẹt
+            driver.refresh()
+            time.sleep(5)
+
+    # 3. Kiểm tra tổng kết
+    if len(failed_total) == len(batch):
+        log_callback("❌ Thất bại toàn bộ batch.")
+        return False, failed_total
+
+    return True, failed_total

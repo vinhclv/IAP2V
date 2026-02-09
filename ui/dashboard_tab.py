@@ -96,7 +96,7 @@ class DashboardTab(ttk.Frame):
         self.selected_mode = tk.StringVar(value="Image ➡ Prompt")
         self.cbo_mode = ttk.Combobox(frame_ctrl, textvariable=self.selected_mode, state="readonly", width=20)
         
-        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt")
+        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", "Prompt ➡ Image")
         self.cbo_mode.pack(side="left", padx=5)
         
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
@@ -117,8 +117,6 @@ class DashboardTab(ttk.Frame):
 
     # --- INPUT HANDLERS [MỚI] ---
     def _on_mode_change(self, event):
-        """Khi đổi mode, thay đổi icon hoặc gợi ý (Optional)"""
-        # Bạn có thể clear ô input nếu muốn an toàn:
         # self.entry_in.delete(0, tk.END)
         pass
 
@@ -126,11 +124,17 @@ class DashboardTab(ttk.Frame):
         """Hàm chọn Input thông minh dựa trên Mode"""
         mode = self.selected_mode.get()
         
-        if mode == "SRT ➡ Prompt":
+        if mode == "SRT ➡ Prompt" or mode == "Prompt ➡ Image":
             # Nếu là mode SRT -> Chọn File .srt
+            if mode == "SRT ➡ Prompt":
+                title = "Chọn file phụ đề SRT"
+                filetypes = [("SRT Files", "*.srt"), ("All Files", "*.*")]
+            else:
+                title = "Chọn file chứa Prompt"
+                filetypes = [("Text Files", "*.json"), ("All Files", "*.*")]
             f = filedialog.askopenfilename(
-                title="Chọn file phụ đề SRT",
-                filetypes=[("SRT Files", "*.srt"), ("All Files", "*.*")]
+                title=title,
+                filetypes=filetypes
             )
         else:
             # Nếu là mode khác -> Chọn Folder

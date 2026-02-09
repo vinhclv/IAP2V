@@ -75,11 +75,13 @@ class BatchApp:
             mode = "Image ➡ Prompt"
 
         if mode == "Image ➡ Prompt":
-            loop_type = "text"   # Logic Image -> Text
+            loop_type = "image_prompt"   # Logic Image -> Text
         elif mode == "Prompt ➡ Video":
-            loop_type = "video"  # Logic Video Gen
+            loop_type = "prompt_video"  # Logic Video Gen
+        elif mode == "Prompt ➡ Image":
+            loop_type = "prompt_image"  # Logic Image Gen
         else:
-            loop_type = "srt"    # Logic SRT
+            loop_type = "srt_prompt"    # Logic SRT
 
         # 3. Lấy Profiles
         profiles = self.tab_profiles.get_selected_profiles()

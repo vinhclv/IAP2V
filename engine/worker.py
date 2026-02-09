@@ -1,7 +1,7 @@
 import os
 from engine.browser import init_driver_from_profile
 import time
-from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt
+from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt, handle_prompt_to_image
 
 def run_worker_task(profile_folder, batch, task_type, assets_path, profiles_dir, stop_event, log_callback):
     """
@@ -33,15 +33,17 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, profiles_dir,
         # 2. ĐIỀU HƯỚNG CHIẾN LƯỢC (ROUTING)
         # Đây là chỗ giúp bạn mở rộng dễ dàng. Thêm task mới chỉ cần thêm if/else
         
-        if task_type == "text":
+        if task_type == "image_prompt":
             is_healthy, failed_items = handle_image_to_prompt(driver, batch, assets_path, task_log)
             
-        elif task_type == "video":
+        elif task_type == "prompt_video":
             is_healthy, failed_items = handle_prompt_to_video(driver, batch, assets_path, task_log)
             
-        elif task_type == "srt": 
+        elif task_type == "srt_prompt": 
             is_healthy, failed_items = handle_srt_to_prompt(driver, batch, assets_path, task_log)
-             
+
+        elif task_type == "prompt_image":
+            is_healthy, failed_items = handle_prompt_to_image(driver, batch, assets_path, task_log)
         else:
             task_log(f"❌ Loại task '{task_type}' chưa được hỗ trợ!", "ERROR")
             return True, failed_items # Trả về nhưng không đánh dấu hỏng profile
