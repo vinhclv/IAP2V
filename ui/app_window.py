@@ -1,17 +1,23 @@
-# ui/app_window.py
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import threading
 from datetime import datetime
 import sv_ttk
 import queue
+import os # Cần import os để xử lý đường dẫn
 
-# Import từ các file khác
+# --- SỬA IMPORT ---
 from config import DEFAULT_PROFILES
+# Import đúng tên class ProfileManagerTab
 from ui.profile_tab import ProfileManagerTab  
 from ui.dashboard_tab import DashboardTab      
 from ui.settings_tab import SettingsTab       
 from engine.batch_processor import BatchProcessor 
+
+# Định nghĩa đường dẫn thư mục chứa Profiles
+PROFILES_DIR = os.path.join(os.getcwd(), "profiles")
+if not os.path.exists(PROFILES_DIR):
+    os.makedirs(PROFILES_DIR)
 
 class BatchApp:
     def __init__(self, root):
@@ -26,16 +32,7 @@ class BatchApp:
         self.is_running = False
         self.stop_event = threading.Event()
         
-        # Khởi tạo Logic Processor
-        self.processor = BatchProcessor(
-            stop_event=self.stop_event,
-            log_callback=self.log,
-            update_status_callback=self.update_project_status_callback
-        )
-
-        self._setup_ui()
-
-    def _setup_ui(self):
+        # 1. Tạo Notebook và các Tab UI TRƯỚC
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
         
@@ -44,7 +41,9 @@ class BatchApp:
         self.notebook.add(self.tab_dashboard, text="📂 Danh sách Dự án")
         
         # TAB 2: Profiles
-        self.tab_profiles = ProfileManagerTab(self.notebook, DEFAULT_PROFILES)
+        # --- SỬA LỖI Ở ĐÂY ---
+        # Truyền PROFILES_DIR vào tham số thứ 2
+        self.tab_profiles = ProfileManagerTab(self.notebook, PROFILES_DIR) 
         self.notebook.add(self.tab_profiles, text="👥 Quản lý Profiles")
 
         # TAB 3: Settings
@@ -54,9 +53,30 @@ class BatchApp:
         # LOGS
         frame_log = ttk.LabelFrame(self.root, text="📜 Nhật ký hoạt động", padding=10)
         frame_log.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        
         self.log_area = scrolledtext.ScrolledText(frame_log, height=10, state='disabled', font=("Consolas", 10))
         self.log_area.pack(fill="both", expand=True)
         self._config_log_tags()
+
+        # 2. Khởi tạo Logic Processor
+        self.processor = BatchProcessor(
+            stop_event=self.stop_event,
+            log_callback=self.log,
+            update_status_callback=self.update_project_status_callback
+        )
+
+        # 3. Lắng nghe sự kiện chuyển Tab (Refresh Gem list)
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+    def _on_tab_changed(self, event):
+        """Tự động refresh danh sách Gem khi quay lại Dashboard"""
+        selected_tab_id = self.notebook.select()
+        if not selected_tab_id: return
+        
+        selected_widget = self.notebook.nametowidget(selected_tab_id)
+        
+        if selected_widget == self.tab_dashboard:
+            self.tab_dashboard.refresh_gem_list()
 
     # --- CÁC HÀM GỌI TỪ UI ---
     def on_start_batch(self):
@@ -66,31 +86,31 @@ class BatchApp:
             messagebox.showwarning("Trống", "Thêm dự án vào list trước!")
             return
         
+        # 2. Lấy tham số chạy
         try:
             limit = int(self.tab_dashboard.spin_limit.get())
             threads = int(self.tab_dashboard.spin_threads.get())
-            mode = self.tab_dashboard.selected_mode.get()
+            mode_text = self.tab_dashboard.selected_mode.get()
         except:
             limit, threads = 5, 3
-            mode = "Image ➡ Prompt"
+            mode_text = "Image ➡ Prompt"
 
-        if mode == "Image ➡ Prompt":
-            loop_type = "image_prompt"   # Logic Image -> Text
-        elif mode == "Prompt ➡ Video":
-            loop_type = "prompt_video"  # Logic Video Gen
-        elif mode == "Prompt ➡ Image":
-            loop_type = "prompt_image"  # Logic Image Gen
-        elif mode == "2_Image ➡ Prompt":
-            loop_type = "2_image_prompt"   # Logic 2Image -> Text  
-        elif mode == "SRT ➡ Image":
-            loop_type = "srt_image"    # Logic SRT
-        else:
-            loop_type = "srt_prompt"    # Logic SRT
+        # Map Text sang Key Logic
+        mode_map = {
+            "Image ➡ Prompt": "image_prompt",
+            "Prompt ➡ Video": "prompt_video",
+            "SRT ➡ Prompt": "srt_prompt",
+            "Prompt ➡ Image": "prompt_image",
+            "2_Image ➡ Prompt": "2_image_prompt",
+            "SRT ➡ Image": "srt_image"
+        }
+        loop_type = mode_map.get(mode_text, "image_prompt")
 
         # 3. Lấy Profiles
         profiles = self.tab_profiles.get_selected_profiles()
         if not profiles:
             self.log("❌ Chưa chọn Profile!", "ERROR")
+            messagebox.showwarning("Thiếu Profile", "Vui lòng chọn ít nhất 1 Profile!")
             return
 
         # 4. Setup trạng thái chạy
@@ -99,33 +119,37 @@ class BatchApp:
         self.tab_dashboard.toggle_buttons(is_running=True)
 
         # 5. Chạy luồng xử lý chính
-        threading.Thread(
+        t_main = threading.Thread(
             target=self.processor.run_batch_logic,
             args=(queue_data, loop_type, limit, threads, profiles, self.on_batch_finished),
             daemon=True
-        ).start()
+        )
+        t_main.start()
 
-        # 6. Chạy luồng Monitor (Cập nhật số liệu Realtime)
-        threading.Thread(
+        # 6. Chạy luồng Monitor
+        t_monitor = threading.Thread(
             target=self.processor.monitor_loop,
             args=(self.tab_dashboard.update_dashboard_stats,),
             daemon=True
-        ).start()
+        )
+        t_monitor.start()
 
     def stop_process(self):
         if self.is_running:
-            self.log("🛑 Đang dừng...", "WARNING")
+            self.log("🛑 Đang dừng... Vui lòng đợi nốt task hiện tại.", "WARNING")
             self.stop_event.set()
-            self.processor.clear_task_queue()
 
     def on_batch_finished(self):
         self.is_running = False
-        self.stop_event.clear()
-        self.root.after(0, lambda: self.tab_dashboard.toggle_buttons(is_running=False))
-        
+        self.root.after(0, lambda: self._finish_ui_update())
+
+    def _finish_ui_update(self):
+        self.tab_dashboard.toggle_buttons(is_running=False)
         if not self.stop_event.is_set():
              self.log("🎉 ĐÃ XONG TẤT CẢ!", "SUCCESS")
              messagebox.showinfo("Xong", "Hoàn thành toàn bộ danh sách!")
+        else:
+             self.log("🛑 Đã dừng theo yêu cầu.", "WARNING")
 
     def update_project_status_callback(self, index, status):
         self.root.after(0, lambda: self.tab_dashboard.update_project_status(index, status))
@@ -139,9 +163,11 @@ class BatchApp:
     def log(self, message, tag="INFO"):
         ts = datetime.now().strftime("%H:%M:%S")
         full_msg = f"[{ts}] {message}\n"
+        
         def _u():
             self.log_area.config(state='normal')
             self.log_area.insert(tk.END, full_msg, tag)
             self.log_area.see(tk.END)
             self.log_area.config(state='disabled')
+            
         self.root.after(0, _u)

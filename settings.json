@@ -1,12 +1,21 @@
 {
     "system": {
         "max_threads": 3,
-        "loop_limit": 5,
-        "max_retries": 30,
-        "wait_time": 5
+        "loop_limit": 9,
+        "max_retries": 30
     },
-    "urls": {
-        "gemini_url": "https://gemini.google.com",
-        "videofx_url": "https://labs.google/fx/tools/video-fx"
-    }
+    "gems": [
+        {
+            "name": "tieu_thuyet",
+            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing"
+        },
+        {
+            "name": "kinh d\u1ecb",
+            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing"
+        },
+        {
+            "name": "prompt_",
+            "url": "https://gemini.google.com/gem/4828ed7257c0/7862ad4019837d08?usp=sharing"
+        }
+    ]
 }

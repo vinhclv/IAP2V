@@ -179,13 +179,20 @@ def init_driver_from_profile(profile_folder_path, log_callback=print):
 
     # Cấu hình Prefs
     prefs = {
-        "download.default_directory": profile_dl_dir, # Folder riêng
-        "download.prompt_for_download": False,        # Tắt popup
+        "download.default_directory": profile_dl_dir,
+        "download.prompt_for_download": False,
         "download.directory_upgrade": True,
-        "safebrowsing.disable_download_protection": True,
+        
+        # --- BỔ SUNG QUAN TRỌNG ĐỂ TẢI NHIỀU ẢNH ---
         "profile.default_content_settings.popups": 0,
-        "safebrowsing.enabled": True,
-        # Chặn cache trình duyệt
+        "profile.content_settings.exceptions.automatic_downloads.*.setting": 1, # Cho phép tải nhiều file
+        "profile.default_content_setting_values.automatic_downloads": 1,        # 1 = Allow, 2 = Block
+        
+        # Tắt các lớp bảo vệ an toàn để không bị chặn file .exe hay ảnh lạ
+        "safebrowsing.enabled": True, # Vẫn bật base nhưng tắt protection bên dưới
+        "safebrowsing.disable_download_protection": True,
+        
+        # Tối ưu hiệu năng (giữ nguyên của bạn)
         "browser.cache.disk.enable": False,
         "browser.cache.memory.enable": False,
         "browser.cache.offline.enable": False,
