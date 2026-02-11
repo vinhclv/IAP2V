@@ -6,6 +6,93 @@ from PIL import Image  # Cần cài: pip install Pillow
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
+import glob
+import shutil
+def download_via_native_button(driver, save_path, download_dir_chrome):
+    """ Logic: Dọn file rác -> Bấm tải -> Lấy file -> Move. """
+    try:
+        wait = WebDriverWait(driver, 15)
+        
+        # --- 0. DỌN SẠCH FILE (AN TOÀN HƠN RMTREE) ---
+        if os.path.exists(download_dir_chrome):
+            # Xóa từng file bên trong thay vì xóa cả folder (Tránh lỗi Access Denied)
+            for f in glob.glob(os.path.join(download_dir_chrome, "*")):
+                try: os.remove(f) 
+                except: pass # Kệ file đang bị lock
+        else:
+            os.makedirs(download_dir_chrome, exist_ok=True)
+
+        # --- 1. CLICK DOWNLOAD ---
+        containers = driver.find_elements(By.XPATH, "//generated-image")
+        if not containers: return False
+        
+        target = containers[-1]
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target)
+        ActionChains(driver).move_to_element(target).perform()
+        time.sleep(1)
+
+        xpath_btn = ".//button[@data-test-id='download-generated-image-button' or .//mat-icon[contains(text(), 'download')]]"
+        try:
+            btn = WebDriverWait(target, 5).until(EC.element_to_be_clickable((By.XPATH, xpath_btn)))
+            driver.execute_script("arguments[0].click();", btn)
+            print("🖱️ Đã click nút Download.")
+        except:
+            print("⚠️ Không click được nút.")
+            return False
+
+        # --- 2. CHỜ FILE (KIÊN NHẪN) ---
+        start_time, downloaded_file = time.time(), None
+        
+        # Giai đoạn 1: Chờ file xuất hiện (max 10s)
+        while time.time() - start_time < 60:
+            if glob.glob(os.path.join(download_dir_chrome, "*")): break
+            time.sleep(0.5)
+            
+        # Giai đoạn 2: Chờ tải xong (max 30s)
+        start_time = time.time()
+        while time.time() - start_time < 50:
+            # List comprehension lọc file ngon
+            files = [f for f in glob.glob(os.path.join(download_dir_chrome, "*")) 
+                     if not f.endswith(('.crdownload', '.tmp'))]
+            
+            # Check size > 0
+            if files:
+                try:
+                    if os.path.getsize(files[0]) > 0:
+                        downloaded_file = files[0]
+                        break
+                except: pass
+            time.sleep(1)
+
+        if not downloaded_file:
+            print("❌ Timeout: Không tải được file.")
+            return False
+
+        # --- 3. MOVE & RENAME (AN TOÀN) ---
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        
+        # Tự động lấy đuôi file nếu save_path thiếu
+        _, ext = os.path.splitext(save_path)
+        if not ext:
+            save_path += os.path.splitext(downloaded_file)[1] or ".jpg"
+
+        # Thử Move (Retry 3 lần nếu bị Windows Lock)
+        for _ in range(3):
+            try:
+                if os.path.exists(save_path): os.remove(save_path)
+                shutil.move(downloaded_file, save_path)
+                print(f"✅ Đã Move: {os.path.basename(save_path)}")
+                return True
+            except Exception as e:
+                time.sleep(1) # Chờ 1s rồi thử lại
+        
+        print("❌ Lỗi không move được file (đang bị lock).")
+        return False
+
+    except Exception as e:
+        print(f"⚠️ Lỗi: {e}")
+        return False     
 
 def process_srt_item_to_image(driver, item, log_callback=print):
     """
@@ -24,7 +111,7 @@ def process_srt_item_to_image(driver, item, log_callback=print):
         os.makedirs(output_folder, exist_ok=True)
 
         # --- 1. PROMPT ENGINEERING (QUAN TRỌNG) ---
-        final_prompt = f"Illustrate the following sentence with a suitable image: {raw_text}"
+        final_prompt = f"Follow the structured GEM process. Create a Surrealist digital painting that illustrates the following quote (do not include any text), featuring white subjects on a black background: {raw_text}"
 
         # --- 2. ĐẾM ẢNH CŨ ---
         # XPath này chỉ lấy ảnh do AI sinh ra, bỏ qua avatar
@@ -67,52 +154,11 @@ def process_srt_item_to_image(driver, item, log_callback=print):
             log_callback(f"❌ Timeout: Gemini không trả ra ảnh cho STT {stt}.")
             return False
 
-        # Đợi thêm để ảnh load full resolution (tránh lấy thumbnail mờ)
-        time.sleep(6)
+        time.sleep(3)
 
-        # --- 5. LẤY URL ẢNH MỚI NHẤT ---
-        current_images = driver.find_elements(By.XPATH, IMG_XPATH)
-        if not current_images: return False
-        
-        new_img_element = current_images[-1]
-        img_url = new_img_element.get_attribute("src")
-
-        # --- 6. TẢI ẢNH VỀ ---
-        download_success = False
-        
-        if img_url.startswith("data:image"):
-            # Trường hợp Base64
-            try:
-                _, encoded = img_url.split(",", 1)
-                with open(save_path, "wb") as f:
-                    f.write(base64.b64decode(encoded))
-                download_success = True
-            except Exception as e:
-                log_callback(f"❌ Lỗi lưu Base64: {e}")
-        else:
-            # Trường hợp URL (HTTP)
-            try:
-                session = requests.Session()
-                # Copy cookies để vượt qua authen của Google
-                for cookie in driver.get_cookies():
-                    session.cookies.set(cookie['name'], cookie['value'])
-                
-                headers = {
-                    "User-Agent": driver.execute_script("return navigator.userAgent;"),
-                    "Referer": "https://gemini.google.com/",
-                }
-                
-                response = session.get(img_url, headers=headers, timeout=30)
-                if response.status_code == 200:
-                    with open(save_path, "wb") as f:
-                        f.write(response.content)
-                    download_success = True
-                else:
-                    log_callback(f"❌ HTTP {response.status_code} khi tải ảnh.")
-            except Exception as e:
-                log_callback(f"❌ Lỗi tải URL: {e}")
-
-        if not download_success: return False
+        if  download_via_native_button(driver, save_path, driver.my_download_dir) == False:
+            log_callback("Lỗi tải về:", stt)
+            return False
 
         # --- 7. KIỂM TRA CHẤT LƯỢNG ẢNH (TỈ LỆ 16:9) ---
         try:

@@ -4,6 +4,7 @@ import shutil # <--- [MỚI] Cần import cái này để xóa folder rác
 import undetected_chromedriver as uc
 import random 
 import json
+
 from config import ORBITA_PATH, DRIVER_PATH
 
 
@@ -122,8 +123,7 @@ def clean_preferences_bloat(profile_path):
     except Exception as e:
         print(f"⚠️ Lỗi nhẹ khi dọn Preferences: {e}")
 
-
-def init_driver_from_profile(profile_folder_path, log_callback=print, download_dir=None):
+def init_driver_from_profile(profile_folder_path, log_callback=print):
     """
     Hàm khởi tạo Driver trực tiếp từ Folder Profile (Không cần JSON).
     """
@@ -135,7 +135,7 @@ def init_driver_from_profile(profile_folder_path, log_callback=print, download_d
 
     folder_name = os.path.basename(profile_folder_path)
     
-    # --- [MỚI] GỌI HÀM DỌN DẸP TRƯỚC KHI MỞ ---
+    # --- GỌI HÀM DỌN DẸP TRƯỚC KHI MỞ ---
     log_callback(f"🧹 Đang dọn dẹp Cache cũ cho profile: {folder_name}...")
     clean_preferences_bloat(profile_folder_path)
     clean_chrome_cache(profile_folder_path)
@@ -158,34 +158,42 @@ def init_driver_from_profile(profile_folder_path, log_callback=print, download_d
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-popup-blocking')
     
-    # --- [MỚI] CÁC DÒNG QUAN TRỌNG ĐỂ KHÔNG LƯU CACHE MỚI ---
-    options.add_argument("--disk-cache-size=1")              # Giới hạn cache ổ cứng = 1 byte (Tắt)
-    options.add_argument("--media-cache-size=1")             # Không cache video (Quan trọng với tool video)
-    options.add_argument("--disable-application-cache")      # Tắt AppCache
-    options.add_argument("--disable-gpu-shader-disk-cache")  # Không lưu shader GPU
-    options.add_argument("--ash-no-nudges")                  # Tắt vài cái popup rác của Chrome
+    # --- CHẶN CACHE MỚI ---
+    options.add_argument("--disk-cache-size=1") 
+    options.add_argument("--media-cache-size=1") 
+    options.add_argument("--disable-application-cache") 
+    options.add_argument("--disable-gpu-shader-disk-cache") 
+    options.add_argument("--ash-no-nudges") 
     
     options.page_load_strategy = 'eager'
 
-    # --- Cấu hình Download (Nếu có) ---
-    if download_dir:
-        if not os.path.exists(download_dir): os.makedirs(download_dir)
-        prefs = {
-            "download.default_directory": download_dir,
-            "download.prompt_for_download": False,
-            "download.directory_upgrade": True,
-            "safebrowsing.enabled": True,
-            "profile.default_content_settings.popups": 0,
-            
-            # [MỚI] Thêm prefs để chặn cache cấp độ trình duyệt
-            "browser.cache.disk.enable": False,
-            "browser.cache.memory.enable": False,
-            "browser.cache.offline.enable": False,
-            "network.http.use-cache": False,
-        }
-        options.add_experimental_option("prefs", prefs)
+    # --- 3. CẤU HÌNH DOWNLOAD RIÊNG BIỆT (QUAN TRỌNG) ---
+    # Tạo folder Downloads riêng cho từng profile
+    profile_dl_dir = os.path.join(profile_folder_path, "Downloads")
+    
+    # Xóa sạch folder này mỗi lần khởi động để tránh rác cũ
+    if os.path.exists(profile_dl_dir):
+        try: shutil.rmtree(profile_dl_dir)
+        except: pass
+    os.makedirs(profile_dl_dir, exist_ok=True)
 
-    # 3. KHỞI TẠO DRIVER
+    # Cấu hình Prefs
+    prefs = {
+        "download.default_directory": profile_dl_dir, # Folder riêng
+        "download.prompt_for_download": False,        # Tắt popup
+        "download.directory_upgrade": True,
+        "safebrowsing.disable_download_protection": True,
+        "profile.default_content_settings.popups": 0,
+        "safebrowsing.enabled": True,
+        # Chặn cache trình duyệt
+        "browser.cache.disk.enable": False,
+        "browser.cache.memory.enable": False,
+        "browser.cache.offline.enable": False,
+        "network.http.use-cache": False,
+    }
+    options.add_experimental_option("prefs", prefs)
+
+    # --- 4. KHỞI TẠO DRIVER ---
     with DRIVER_INIT_LOCK:
         try:
             driver = uc.Chrome(
@@ -195,7 +203,12 @@ def init_driver_from_profile(profile_folder_path, log_callback=print, download_d
                 use_subprocess=True,
                 headless=False,
             )
+            
+            # --- [FIX LỖI QUAN TRỌNG] GÁN BIẾN SAU KHI TẠO DRIVER ---
+            driver.my_download_dir = profile_dl_dir 
+            
             return driver
+            
         except Exception as e:
             log_callback(f"❌ Lỗi khởi tạo Chrome ({folder_name}): {e}")
             return None
