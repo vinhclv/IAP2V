@@ -82,7 +82,7 @@ class BatchApp:
             loop_type = "prompt_image"  # Logic Image Gen
         elif mode == "2_Image ➡ Prompt":
             loop_type = "2_image_prompt"   # Logic 2Image -> Text  
-        elif mode == "Srt -> Image":
+        elif mode == "SRT ➡ Image":
             loop_type = "srt_image"    # Logic SRT
         else:
             loop_type = "srt_prompt"    # Logic SRT

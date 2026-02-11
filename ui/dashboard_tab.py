@@ -1,6 +1,5 @@
-# ui/dashboard_tab.py
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 from config import DEFAULT_INPUT, DEFAULT_OUTPUT, load_config
 
 class DashboardTab(ttk.Frame):
@@ -10,36 +9,63 @@ class DashboardTab(ttk.Frame):
         self.project_queue = []
         
         self._setup_ui()
-        self._load_defaults() # Load config mặc định khi mở
+        self._load_defaults() 
 
     def _setup_ui(self):
         # 1. Thêm dự án
         frame_add = ttk.LabelFrame(self, text="➕ Thêm Dự án", padding=10)
         frame_add.pack(fill="x", padx=10, pady=5)
 
-        # --- INPUT (SỬA LOGIC CHỌN FILE/FOLDER) ---
-        ttk.Label(frame_add, text="Input:").grid(row=0, column=0, sticky="w")
+        # --- Dòng 1: Input ---
+        ttk.Label(frame_add, text="Input:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.entry_in = ttk.Entry(frame_add)
         self.entry_in.insert(0, DEFAULT_INPUT)
         self.entry_in.grid(row=0, column=1, sticky="ew", padx=5)
         
         # Nút chọn Input (Gọi hàm riêng _pick_input để check mode)
         self.btn_in = ttk.Button(frame_add, text="📂", width=3, command=self._pick_input)
-        self.btn_in.grid(row=0, column=2)
+        self.btn_in.grid(row=0, column=2, padx=5)
 
-        # --- OUTPUT ---
-        ttk.Label(frame_add, text="Output:").grid(row=1, column=0, sticky="w")
+        # --- Dòng 2: Output ---
+        ttk.Label(frame_add, text="Output:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.entry_out = ttk.Entry(frame_add)
         self.entry_out.insert(0, DEFAULT_OUTPUT)
         self.entry_out.grid(row=1, column=1, sticky="ew", padx=5)
         
         # Nút chọn Output (Luôn là Folder)
-        ttk.Button(frame_add, text="📂", width=3, command=lambda: self._pick_folder(self.entry_out)).grid(row=1, column=2)
+        self.btn_out = ttk.Button(frame_add, text="📂", width=3, command=lambda: self._pick_folder(self.entry_out))
+        self.btn_out.grid(row=1, column=2, padx=5)
+
+        # --- Dòng 3: URL và Prompt ---
+        
+        ttk.Label(frame_add, text="URL:").grid(row=2, column=0, sticky="w", padx=5, pady=5)
+        self.entry_url = ttk.Entry(frame_add)
+        self.entry_url.grid(row=2, column=1, sticky="ew", padx=5)
+        self.entry_url.insert(0, "Nhập URL (Bắt buộc)...")
+        self.entry_url.bind("<FocusIn>", lambda event: self._clear_placeholder(event, "Nhập URL (Bắt buộc)..."))
+        self.entry_url.bind("<FocusOut>", lambda event: self._add_placeholder(event, "Nhập URL (Bắt buộc)..."))
+
+
+        # Frame con cho dòng 3
+        frame_url_prompt = ttk.Frame(frame_add)
+        frame_url_prompt.grid(row=2, column=1, columnspan=2, sticky="ew", pady=5)
+        frame_url_prompt.columnconfigure(0, weight=3)
+        frame_url_prompt.columnconfigure(1, weight=2) 
+
+        self.entry_url = ttk.Entry(frame_url_prompt)
+        self.entry_url.grid(row=0, column=0, sticky="ew", padx=(5, 5))
+        self._set_placeholder(self.entry_url, "Nhập URL (Bắt buộc)...")
+
+        self.entry_prompt = ttk.Entry(frame_url_prompt)
+        self.entry_prompt.grid(row=0, column=1, sticky="ew", padx=(5, 0))
+        self._set_placeholder(self.entry_prompt, "Nhập Prompt (Tùy chọn)...")
+
+        
+        # Nút Thêm (Đặt ở bên phải cùng, trải dài 3 dòng)
+        self.btn_add = ttk.Button(frame_add, text="⬇ THÊM", command=self.add_project_to_queue)
+        self.btn_add.grid(row=0, column=3, rowspan=3, padx=10, sticky="ns")
 
         frame_add.columnconfigure(1, weight=1)
-        
-        # Nút Thêm
-        ttk.Button(frame_add, text="⬇ THÊM", command=self.add_project_to_queue).grid(row=0, column=3, rowspan=2, padx=10, sticky="ns")
 
         # 2. DASHBOARD REALTIME
         frame_dash = ttk.LabelFrame(self, text="📊 Tiến độ Real-time", padding=15)
@@ -65,12 +91,17 @@ class DashboardTab(ttk.Frame):
         frame_list = ttk.LabelFrame(self, text="📋 Hàng chờ", padding=10)
         frame_list.pack(fill="both", expand=True, padx=10, pady=5)
 
-        columns = ("stt", "input", "output", "status")
+        # Thêm cột URL và Prompt vào Treeview
+        columns = ("stt", "input", "output", "url", "prompt", "status")
         self.tree = ttk.Treeview(frame_list, columns=columns, show="headings", height=6)
+        
         self.tree.heading("stt", text="#"); self.tree.column("stt", width=30, anchor="center")
-        self.tree.heading("input", text="Input"); self.tree.column("input", width=350)
-        self.tree.heading("output", text="Output"); self.tree.column("output", width=350)
+        self.tree.heading("input", text="Input"); self.tree.column("input", width=200)
+        self.tree.heading("output", text="Output"); self.tree.column("output", width=200)
+        self.tree.heading("url", text="URL"); self.tree.column("url", width=150)
+        self.tree.heading("prompt", text="Prompt"); self.tree.column("prompt", width=150)
         self.tree.heading("status", text="Trạng thái"); self.tree.column("status", width=100, anchor="center")
+        
         self.tree.pack(side="left", fill="both", expand=True)
         
         sb = ttk.Scrollbar(frame_list, orient="vertical", command=self.tree.yview)
@@ -96,7 +127,7 @@ class DashboardTab(ttk.Frame):
         self.selected_mode = tk.StringVar(value="Image ➡ Prompt")
         self.cbo_mode = ttk.Combobox(frame_ctrl, textvariable=self.selected_mode, state="readonly", width=20)
         
-        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", "Prompt ➡ Image", "2_Image ➡ Prompt", "Srt -> Image")
+        self.cbo_mode['values'] = ("Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", "Prompt ➡ Image", "2_Image ➡ Prompt", "SRT ➡ Image")
         self.cbo_mode.pack(side="left", padx=5)
         
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
@@ -115,29 +146,46 @@ class DashboardTab(ttk.Frame):
             self.spin_threads.set(cfg["system"].get("max_threads", 3))
         except: pass
 
-    # --- INPUT HANDLERS [MỚI] ---
+    # --- Helper Placeholder ---
+    def _set_placeholder(self, entry, text):
+        entry.insert(0, text)
+        entry.configure(foreground="grey")
+        entry.bind("<FocusIn>", lambda event: self._clear_placeholder(event, text))
+        entry.bind("<FocusOut>", lambda event: self._add_placeholder(event, text))
+
+    def _clear_placeholder(self, event, text):
+        if event.widget.get() == text:
+            event.widget.delete(0, tk.END)
+            event.widget.configure(foreground="black")
+
+    def _add_placeholder(self, event, text):
+        if not event.widget.get():
+            event.widget.insert(0, text)
+            event.widget.configure(foreground="grey")
+
+    # --- INPUT HANDLERS ---
     def _on_mode_change(self, event):
-        # self.entry_in.delete(0, tk.END)
+        # Có thể thêm logic thay đổi label Input/Output tùy mode
         pass
 
     def _pick_input(self):
         """Hàm chọn Input thông minh dựa trên Mode"""
         mode = self.selected_mode.get()
         
-        if mode == "SRT ➡ Prompt" or mode == "Prompt ➡ Image" or mode == "Srt -> Image":
-            # Nếu là mode SRT -> Chọn File .srt
-            if mode == "SRT ➡ Prompt" or mode == "Srt -> Image":
+        # Các mode cần file input
+        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image"]
+        
+        if mode in file_modes:
+            if "SRT" in mode:
                 title = "Chọn file phụ đề SRT"
                 filetypes = [("SRT Files", "*.srt"), ("All Files", "*.*")]
-            else:
-                title = "Chọn file chứa Prompt"
-                filetypes = [("Text Files", "*.json"), ("All Files", "*.*")]
-            f = filedialog.askopenfilename(
-                title=title,
-                filetypes=filetypes
-            )
+            else: 
+                title = "Chọn file chứa Prompt (JSON/Text)"
+                filetypes = [("JSON Files", "*.json"), ("Text Files", "*.txt"), ("All Files", "*.*")]
+            
+            f = filedialog.askopenfilename(title=title, filetypes=filetypes)
         else:
-            # Nếu là mode khác -> Chọn Folder
+            # Các mode folder input (Image -> Prompt, 2_Image -> Prompt...)
             f = filedialog.askdirectory(title="Chọn thư mục Input")
             
         if f:
@@ -154,17 +202,45 @@ class DashboardTab(ttk.Frame):
     def add_project_to_queue(self):
         inp = self.entry_in.get().strip()
         out = self.entry_out.get().strip()
+        url_val = self.entry_url.get().strip()
+        prompt_val = self.entry_prompt.get().strip()
+
+        # Xử lý placeholder (nếu người dùng không nhập gì mà để nguyên placeholder)
+        if url_val == "Nhập URL (Bắt buộc)...": url_val = ""
+        if prompt_val == "Nhập Prompt (Tùy chọn)...": prompt_val = ""
+
+        # Validate
+        if not inp or not out:
+            messagebox.showerror("Lỗi", "Vui lòng chọn Input và Output!")
+            return
         
-        if not inp or not out: return
+        if not url_val:
+            messagebox.showerror("Lỗi", "Vui lòng nhập URL!")
+            return
+
+        # Tạo Task Item
+        task_item = {
+            "input": inp,
+            "output": out,
+            "url": url_val,
+            "prompt": prompt_val, # Optional
+            "status": "Waiting"
+        }
         
         # Thêm vào hàng đợi
-        self.project_queue.append({"input": inp, "output": out, "status": "Waiting"})
+        self.project_queue.append(task_item)
         self.refresh_treeview()
+        
+        # Reset form (giữ lại URL/Prompt placeholder nếu muốn hoặc xóa trắng)
+        # self.entry_url.delete(0, tk.END); self._add_placeholder(type('obj', (object,), {'widget': self.entry_url}), "Nhập URL (Bắt buộc)...")
 
     def remove_selected_project(self):
         sel = self.tree.selection()
         if sel:
-            del self.project_queue[self.tree.index(sel[0])]
+            # Xóa từ dưới lên để tránh lỗi index khi xóa nhiều dòng
+            for item in reversed(sel):
+                idx = self.tree.index(item)
+                del self.project_queue[idx]
             self.refresh_treeview()
 
     def clear_all_projects(self):
@@ -173,12 +249,13 @@ class DashboardTab(ttk.Frame):
     def refresh_treeview(self):
         for item in self.tree.get_children(): self.tree.delete(item)
         for i, p in enumerate(self.project_queue):
-            self.tree.insert("", "end", values=(i+1, p["input"], p["output"], p["status"]))
+            self.tree.insert("", "end", values=(i+1, p["input"], p["output"], p["url"], p["prompt"], p["status"]))
 
     def update_project_status(self, index, status):
         if 0 <= index < len(self.project_queue):
             self.project_queue[index]["status"] = status
-            self.refresh_treeview()
+            child_id = self.tree.get_children()[index]
+            self.tree.set(child_id, "status", status)
 
     def update_dashboard_stats(self, total, pending, done):
         self.lbl_total.config(text=f"{total}")

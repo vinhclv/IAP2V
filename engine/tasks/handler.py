@@ -8,14 +8,14 @@ from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
 from engine.tasks.srt_to_image import process_srt_item_to_image
 import time
 
-def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
+def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý danh sách ảnh để tạo prompt.
     Logic sức khỏe: Dừng nếu lỗi liên tiếp hoặc thất bại toàn tập.
     """
     # 1. Vào trang & Check Login
     try:
-        driver.get("https://gemini.google.com/gem/1eGtVu5CR6oCr6OM3Ynf_RCQjvYOHtoEz?usp=sharing")
+        driver.get(url)
         time.sleep(5)
     except Exception as e:
         log_callback(f"❌ Lỗi mở trang Gemini: {e}")
@@ -83,9 +83,9 @@ def handle_image_to_prompt(driver, file_batch, assets_path, log_callback):
     # Nếu làm được ít nhất 1 cái (hoặc skip do đã có) -> Profile OK
     return True, failed_list
 
-def handle_prompt_to_video(driver, file_batch, assets_path, log_callback):
+def handle_prompt_to_video(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
     # 1. Vào trang & Check Login
-    driver.get("https://labs.google/fx/tools/video-fx")
+    driver.get(url)
     time.sleep(5)
     
     if "accounts.google.com" in driver.current_url:
@@ -143,10 +143,10 @@ def handle_prompt_to_video(driver, file_batch, assets_path, log_callback):
 
     return True, failed_total
 
-def handle_srt_to_prompt(driver, batch, _, log_callback):
+def handle_srt_to_prompt(driver, batch, assets_path, prefix_prompt, url, log_callback):
     try:
         if "gemini.google.com" not in driver.current_url:
-            driver.get("https://gemini.google.com/app")
+            driver.get(url)
             time.sleep(5)
     except Exception as e:
         log_callback(f"❌ Error opening Gemini page: {e}")
@@ -217,14 +217,14 @@ def handle_srt_to_prompt(driver, batch, _, log_callback):
 
     return True, failed_list
 
-def handle_prompt_to_image(driver, batch, assets_path, log_callback):
+def handle_prompt_to_image(driver, batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý Prompt -> Image. Quản lý vòng lặp và điều phối lỗi.
     """
     # 1. Vào trang & Check Login
     try:
         if "gemini.google.com" not in driver.current_url:
-            driver.get("https://gemini.google.com/gem/475dfb0a0b56?usp=sharing")
+            driver.get(url)
             time.sleep(5)
     except Exception as e:
         log_callback(f"❌ Lỗi mở trang: {e}")
@@ -271,7 +271,7 @@ def handle_prompt_to_image(driver, batch, assets_path, log_callback):
 
     return True, failed_total
 
-def handle_2_image_to_prompt(driver, batch, assets_path, log_callback):
+def handle_2_image_to_prompt(driver, batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý danh sách cặp ảnh (1-2, 2-3...) để tạo prompt nối.
     """
@@ -279,7 +279,7 @@ def handle_2_image_to_prompt(driver, batch, assets_path, log_callback):
     try:
         # Dùng URL này để vào thẳng giao diện chat mới (hoặc url mặc định)
         if "gemini.google.com" not in driver.current_url:
-            driver.get("https://gemini.google.com/app")
+            driver.get(url)
             time.sleep(5)
     except Exception as e:
         log_callback(f"❌ Lỗi mở trang Gemini: {e}")
@@ -354,7 +354,7 @@ def handle_2_image_to_prompt(driver, batch, assets_path, log_callback):
 
     return True, failed_list
 
-def handle_srt_to_image(driver, batch, assets_path, log_callback):
+def handle_srt_to_image(driver, batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý danh sách task từ SRT -> Image.
     Input: batch là danh sách các dict {'id', 'prompt', 'save_path', ...}
@@ -362,7 +362,7 @@ def handle_srt_to_image(driver, batch, assets_path, log_callback):
     # 1. Vào trang & Check Login
     try:
         # URL custom bạn cung cấp
-        driver.get("https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing")
+        driver.get(url)
         time.sleep(5)
     except Exception as e:
         log_callback(f"❌ Lỗi mở trang: {e}")
@@ -379,6 +379,7 @@ def handle_srt_to_image(driver, batch, assets_path, log_callback):
     # --- 2. VÒNG LẶP XỬ LÝ TỪNG DÒNG SUB ---
     for item in batch:
         # Lấy dữ liệu từ item (được tạo ra bởi get_srt_image_status)
+        item['prompt'] = f"{prefix_prompt} {item['prompt']}"
         stt = item['id']
         text_content = item['prompt'] # Đây là nội dung sub
         save_path = item['save_path']

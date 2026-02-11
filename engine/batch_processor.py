@@ -35,11 +35,13 @@ class BatchProcessor:
             
             input_path = project["input"]
             output_path = project["output"]
+            prompt = project["prompt"]
+            url = project["url"]
             
             self.update_status(idx, "Running ⏳")
             self.log(f"=== DỰ ÁN {idx+1}/{len(project_queue)}: {os.path.basename(input_path)} ===", "INFO")
             
-            self.process_one_folder(input_path, output_path, loop_type, limit, threads, profiles)
+            self.process_one_folder(input_path, output_path, prompt, url, loop_type, limit, threads, profiles)
             
             if self.stop_event.is_set():
                 self.update_status(idx, "Stopped 🛑")
@@ -50,7 +52,7 @@ class BatchProcessor:
 
         finished_callback()
 
-    def process_one_folder(self, inp, out, loop_type, limit, threads, profiles):
+    def process_one_folder(self, inp, out, prompt, url, loop_type, limit, threads, profiles):
         self.current_monitoring_info = (inp, out, loop_type)
         
         self.clear_task_queue()
@@ -87,7 +89,7 @@ class BatchProcessor:
             with concurrent.futures.ThreadPoolExecutor(max_workers=cur_threads) as executor:
                 futures = []
                 for p_name in living_profiles: # run multiple profiles
-                    f = executor.submit(self.continuous_profile_runner, p_name, loop_type, inp, out, limit)
+                    f = executor.submit(self.continuous_profile_runner, p_name, loop_type, inp, out, prompt, url, limit)
                     futures.append(f)
                 
                 concurrent.futures.wait(futures)
@@ -97,7 +99,7 @@ class BatchProcessor:
         
         self.current_monitoring_info = None
 
-    def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, limit):
+    def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, prompt, url, limit):
         while not self.stop_event.is_set():
             fails = self.profile_health.get(profile_name, 0)
             if fails >= MAX_RETRIES:
@@ -140,7 +142,7 @@ class BatchProcessor:
 
             self.log(f"▶️ [{profile_name}] Nhận {len(batch)} task...", "INFO")
             is_healthy, failed_items = run_worker_task(
-                profile_name, batch, loop_type, out_path, DEFAULT_PROFILES, self.stop_event, self.log
+                profile_name, batch, loop_type, out_path, prompt, url, DEFAULT_PROFILES, self.stop_event, self.log
             )
 
             if failed_items:
