@@ -256,8 +256,6 @@ def get_srt_image_status(srt_path, output_dir):
 
         # 2. Xác định thư mục chứa ảnh đầu ra
         # Tên project lấy theo tên file SRT (ví dụ: movie.srt -> movie)
-        project_name = os.path.splitext(os.path.basename(srt_path))[0]
-        images_dir = os.path.join(output_dir, project_name)
 
         # 3. Duyệt qua từng dòng sub để tạo Task
         for idx, _, text in matches:
@@ -270,14 +268,14 @@ def get_srt_image_status(srt_path, output_dir):
 
             # Đường dẫn file ảnh mong đợi (ví dụ: output/movie/1.jpg)
             image_filename = f"{idx}.jpg"
-            image_path = os.path.join(images_dir, image_filename)
+            image_path = os.path.join(output_dir, image_filename)
 
             # Tạo object task để Worker sử dụng ngay
             task_item = {
                 "id": idx,
                 "prompt": clean_text,         # Dùng trực tiếp text sub làm prompt
                 "save_path": image_path,      # Đường dẫn file ảnh đích
-                "output_folder": images_dir,  # Thư mục chứa ảnh (để Worker os.makedirs)
+                "output_folder": output_dir,  # Thư mục chứa ảnh (để Worker os.makedirs)
             }
 
             # 4. Kiểm tra trạng thái

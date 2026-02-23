@@ -82,7 +82,7 @@ def download_via_native_button(driver, save_path, download_dir_chrome, log_callb
         downloaded_file = None
         start_wait = time.time()
         
-        MIN_SIZE_BYTES = 200 * 1024 
+        MIN_SIZE_BYTES = 100 * 1024 
 
         while time.time() - start_wait < 60: # Timeout 60s
             # 1. Lấy danh sách file đã bỏ đuôi .crdownload
