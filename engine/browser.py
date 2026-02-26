@@ -210,7 +210,10 @@ def init_driver_from_profile(profile_folder_path, log_callback=print):
                 use_subprocess=True,
                 headless=False,
             )
-            
+            driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+            "behavior": "allow",
+            "downloadPath": profile_dl_dir
+        })
             # --- [FIX LỖI QUAN TRỌNG] GÁN BIẾN SAU KHI TẠO DRIVER ---
             driver.my_download_dir = profile_dl_dir 
             
