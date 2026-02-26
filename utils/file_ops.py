@@ -3,7 +3,7 @@ import re
 import json
 
 def get_image_prompt_status(img_dir, out_dir):
-    """Quét trạng thái ảnh và prompt"""
+    """Quét trạng thái: Mỗi ảnh tương ứng với một file [tên_ảnh]_prompt.txt"""
     if not os.path.exists(img_dir): return [], []
     
     all_imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
@@ -11,7 +11,8 @@ def get_image_prompt_status(img_dir, out_dir):
     
     for img in all_imgs:
         name_no_ext = os.path.splitext(img)[0]
-        prompt_file = os.path.join(out_dir, name_no_ext, "prompt.txt")
+        # CẬP NHẬT Ở ĐÂY: Đường dẫn file kiểu out_dir/tên_ảnh_prompt.txt
+        prompt_file = os.path.join(out_dir, f"{name_no_ext}_prompt.txt")
         full_img_path = os.path.join(img_dir, img) 
         
         if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 0:
@@ -166,7 +167,7 @@ def get_prompt_image_status(prompt_json_path, output_root_dir):
 def get_2_image_prompt_status(img_dir, output_dir):
     """
     Quét folder ảnh, tạo cặp ảnh liên tiếp (1-2, 2-3...)
-    Kiểm tra xem đã có prompt.txt cho cặp đó chưa.
+    Kiểm tra xem đã có file [id1]-[id2]_prompt.txt chưa (cấu trúc phẳng).
     """
     pending = []
     completed = []
@@ -176,47 +177,40 @@ def get_2_image_prompt_status(img_dir, output_dir):
 
     try:
         # 1. Lấy danh sách file ảnh và SẮP XẾP SỐ HỌC
-        # (Để tránh trường hợp sort sai kiểu string: 1, 10, 11, 2...)
         valid_exts = ['.jpg', '.jpeg', '.png', '.webp']
         files = [f for f in os.listdir(img_dir) if os.path.splitext(f)[1].lower() in valid_exts]
         
-        # Sắp xếp theo số (giả sử tên file là 1.jpg, 2.jpg...)
+        # Sắp xếp để đảm bảo thứ tự 1, 2, 3... thay vì 1, 10, 2...
         try:
             files.sort(key=lambda f: int(os.path.splitext(f)[0]))
         except ValueError:
-            # Fallback nếu tên file không phải số (ví dụ: frame_01.jpg)
             files.sort()
 
         if len(files) < 2:
             return [], [] # Không đủ 2 ảnh để tạo cặp
 
         # 2. Duyệt qua danh sách để tạo cặp (Sliding Window)
-        # Chạy từ 0 đến N-1
         for i in range(len(files) - 1):
-            img1_name = files[i]     # Ví dụ: 1.jpg
-            img2_name = files[i+1]   # Ví dụ: 2.jpg
+            img1_name = files[i]
+            img2_name = files[i+1]
             
-            # Lấy tên file không đuôi để đặt tên folder (1, 2)
             id1 = os.path.splitext(img1_name)[0]
             id2 = os.path.splitext(img2_name)[0]
             
-            pair_id = f"{id1}-{id2}" # Tên folder: 1-2
+            pair_id = f"{id1}-{id2}" # Ví dụ: 1-2
             
-            # Đường dẫn Output
-            sub_folder = os.path.join(output_dir, pair_id)
-            prompt_file = os.path.join(sub_folder, "prompt.txt")
+            # ĐƯỜNG DẪN MỚI: out_dir / 1-2_prompt.txt
+            prompt_file = os.path.join(output_dir, f"{pair_id}_prompt.txt")
             
-            # Tạo Task Object
             task_item = {
-                "id": pair_id,           # ID cặp: "1-2"
-                "img1_path": os.path.join(img_dir, img1_name), # Đường dẫn ảnh 1
-                "img2_path": os.path.join(img_dir, img2_name), # Đường dẫn ảnh 2
-                "output_folder": sub_folder,                   # Folder đích
-                "prompt_file": prompt_file,                    # File kết quả mong muốn
+                "pair_id": pair_id,
+                "img1_path": os.path.join(img_dir, img1_name),
+                "img2_path": os.path.join(img_dir, img2_name),
+                "output_dir": output_dir, # Thư mục gốc để lưu file phẳng
+                "prompt_file": prompt_file,
             }
 
-            # 3. Kiểm tra trạng thái
-            # Coi như hoàn thành nếu file prompt.txt tồn tại và có dữ liệu (>10 bytes)
+            # 3. Kiểm tra trạng thái file phẳng
             if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 10:
                 completed.append(task_item)
             else:

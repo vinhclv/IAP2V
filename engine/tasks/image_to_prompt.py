@@ -41,6 +41,7 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
 
         abs_path = os.path.abspath(image_path)
         filename = os.path.basename(abs_path)
+        name_no_ext = os.path.splitext(filename)[0]
         
         # 1. Chuẩn bị dữ liệu ảnh
         mime_type, _ = mimetypes.guess_type(abs_path)
@@ -160,7 +161,7 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
         # 2. Tách dòng và lọc
         clean_lines = []
         raw_lines = final_text.splitlines()
-        
+         
         for index, line in enumerate(raw_lines):
             l = line.strip()
             if not l: continue # Bỏ qua dòng trống
@@ -180,7 +181,7 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
         final_content = "\n".join(clean_lines)
 
         # Lưu file
-        prompt_file = os.path.join(output_subfolder, "prompt.txt")
+        prompt_file = os.path.join(output_subfolder, f"{name_no_ext}_prompt.txt")
         with open(prompt_file, "w", encoding="utf-8") as f:
             f.write(final_content)
 

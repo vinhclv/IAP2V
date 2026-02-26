@@ -7,7 +7,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder, log_callback=print):
+def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder,pair_id, log_callback=print):
     """
     CHIẾN THUẬT: FAKE PASTE 2 ẢNH LIÊN TIẾP
     1. Dọn dẹp input cũ.
@@ -195,7 +195,7 @@ def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder, l
         # Đảm bảo folder output tồn tại
         os.makedirs(output_folder, exist_ok=True)
         
-        prompt_file = os.path.join(output_folder, "prompt.txt")
+        prompt_file = os.path.join(output_folder, f"{pair_id}_prompt.txt")
         with open(prompt_file, "w", encoding="utf-8") as f:
             f.write(final_content)
 

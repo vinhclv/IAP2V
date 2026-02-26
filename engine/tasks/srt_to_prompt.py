@@ -9,8 +9,11 @@ from selenium.webdriver.support import expected_conditions as EC
 
 def process_srt_to_prompt(driver, chunk, log_callback=print):
     """
-    Xử lý gửi Chunk lên Gemini -> Nhận phản hồi -> Parse -> Lưu thẳng vào JSON.
-    Có cơ chế lọc bỏ lời dẫn thừa (Intro/Outro) của Gemini.
+    Cơ chế tối giản:
+    1. Chỉ trích xuất nội dung bên trong Code Block.
+    2. Thử parse JSON trước (để lấy mọi trường dữ liệu GEM trả ra).
+    3. Nếu không phải JSON, dùng Regex lấy ID: Prompt.
+    4. Ghi thẳng vào file JSON (không kiểm tra trùng, không sắp xếp).
     """
     try:
         wait = WebDriverWait(driver, 30)
@@ -25,102 +28,77 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
         for item in chunk:
             srt_content_block += f"ID {item['id']}: {item['text']}\n"
 
-        user_prompt = (
-            f"I have a list of subtitle lines. For EACH line, describe a highly detailed cinematic scene visualizing the text. "
-            f"Do not merge lines. Return the result strictly in this format for every line:\n"
-            f"ID [number]: [Visual Description]\n\n"
-            f"Here is the list:\n"
-            f"{srt_content_block}"
+        prefix_instruction = (
+            "COMMAND: You must output the result strictly inside a Markdown code block (```json ... ```).\n"
+            "Include ID and all visual details. Do not include any text outside the code block."
         )
 
-        # --- 2. GỬI GEMINI ---
+        user_prompt = f"{prefix_instruction}\n\nList:\n{srt_content_block}"
+
+        # --- 2. GỬI TIN NHẮN ---
         try:
             input_box = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true']")))
             input_box.clear()
-        except:
-            log_callback("❌ Không tìm thấy ô nhập liệu.")
-            return False
-
-        driver.execute_script("arguments[0].textContent = arguments[1];", input_box, user_prompt)
-        input_box.send_keys(" ") 
-        time.sleep(1)
-
-        try:
+            driver.execute_script("arguments[0].textContent = arguments[1];", input_box, user_prompt)
+            input_box.send_keys(" ") 
+            time.sleep(1)
             send_button = driver.find_element(By.XPATH, "//button[contains(@aria-label, 'Send') or .//mat-icon[text()='send']]")
             driver.execute_script("arguments[0].click();", send_button)
-        except:
-            input_box.send_keys(Keys.ENTER)
+        except: return False
 
-        # --- 3. ĐỢI KẾT QUẢ ---
+        # --- 3. ĐỢI PHẢN HỒI XONG ---
         log_callback("⏳ Đang đợi Gemini trả lời...")
-
         RESPONSE_SELECTOR = "div.markdown-main-panel[id^='model-response-message-content']"
         old_count = len(driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR))
-        WebDriverWait(driver, 120).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
+        wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
         
-        el = driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)[-1]
+        last_response_el = driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)[-1]
         
-        # Smart Wait logic
-        stable_time = 0
-        last_text = ""
+        last_len = -1
         start_wait = time.time()
-        while stable_time < 3:
-            if time.time() - start_wait > 180: break
-            time.sleep(1)
-            try:
-                curr = el.text.strip()
-            except: 
-                curr = last_text
-                
-            if curr == last_text and curr != "": stable_time += 1
-            else: stable_time = 0; last_text = curr
+        while True:
+            curr_len = len(last_response_el.text)
+            if curr_len == last_len and curr_len > 0: break
+            last_len = curr_len
+            time.sleep(2)
+            if time.time() - start_wait > 90: break
 
-        # --- 7. XỬ LÝ TEXT VÀ LỌC LẤY 1 PROMPT DUY NHẤT ---
-        final_text = last_text.strip()
-
-        # A. Regex tách ID và Prompt thô
-        # Regex này sẽ lấy cả phần đuôi thừa của ID cuối cùng
-        pattern = re.compile(r'ID\s+(\d+):\s*(.*?)(?=(?:ID\s+\d+:)|$)', re.DOTALL | re.IGNORECASE)
-        matches = pattern.findall(final_text)
-        
-        parsed_results = {}
-        
-        # Các từ khóa để nhận diện câu thừa ở cuối (Footer garbage)
-        stop_phrases = [
-            "would you like", "do you want", "let me know", 
-            "hope this", "here are", "feel free", "generate an image"
-        ]
-
-        for pid, ptext in matches:
-            clean_text = ptext.strip()
-            
-            # Xử lý cắt bỏ phần thừa (đặc biệt là ở ID cuối cùng)
-            lines = clean_text.split('\n')
-            valid_lines = []
-            for line in lines:
-                # Nếu dòng chứa từ khóa "hỏi thăm" của AI -> Dừng lấy tiếp
-                if any(phrase in line.lower() for phrase in stop_phrases):
-                    break
-                valid_lines.append(line)
-            
-            final_prompt = "\n".join(valid_lines).strip()
-            parsed_results[pid.strip()] = final_prompt
-
-        # B. Chuẩn bị data
-        new_entries = []
-        for item in chunk:
-            sub_id = str(item['id'])
-            if sub_id in parsed_results:
-                new_entries.append({
-                    "STT": sub_id,
-                    "Prompt": parsed_results[sub_id]
-                })
-
-        if not new_entries:
-            log_callback(f"⚠️ Không parse được ID nào.\nRaw: {last_text[:100]}...")
+        # --- 4. TRÍCH XUẤT CODE BLOCK ---
+        code_elements = last_response_el.find_elements(By.XPATH, ".//pre/code")
+        if not code_elements:
+            log_callback("❌ False: Không có Code Block.")
             return False
 
-        # C. Lưu dồn vào JSON
+        full_code_content = "\n".join([el.text for el in code_elements]).strip()
+
+        # --- 5. PARSE DỮ LIỆU (JSON HOẶC REGEX) ---
+        new_entries = []
+
+        # Thử parse JSON (Lấy tất cả các trường GEM trả ra)
+        try:
+            # Làm sạch chuỗi block code
+            clean_str = full_code_content
+            if "```" in clean_str:
+                clean_str = re.sub(r'```[a-z]*', '', clean_str).replace('```', '').strip()
+            
+            data = json.loads(clean_str)
+            if isinstance(data, list):
+                new_entries = data
+            elif isinstance(data, dict):
+                new_entries = [data]
+            log_callback("✅ Đã lấy dữ liệu định dạng JSON.")
+        except:
+            # Nếu lỗi JSON, dùng Regex (Dự phòng cho text thường)
+            log_callback("ℹ️ Parse JSON lỗi, chuyển sang Regex...")
+            matches = re.findall(r'ID\s*(\d+)[:\- ]+(.*?)(?=(?:\n\s*ID\s*\d+)|$)', full_code_content, re.DOTALL | re.IGNORECASE)
+            for m in matches:
+                new_entries.append({"STT": m[0].strip(), "Prompt": m[1].strip()})
+
+        if not new_entries:
+            log_callback("⚠️ Code Block rỗng hoặc không đúng cấu trúc.")
+            return False
+
+        # --- 6. LƯU DỒN (APPEND) VÀO FILE ---
         try:
             current_data = []
             if os.path.exists(json_output_path):
@@ -131,22 +109,16 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
 
             current_data.extend(new_entries)
 
-            unique_data = {d['STT']: d for d in current_data}.values()
-            final_list = list(unique_data)
-            
-            try: final_list.sort(key=lambda x: int(x.get("STT", 0)))
-            except: pass
-
             with open(json_output_path, 'w', encoding='utf-8') as f:
-                json.dump(final_list, f, ensure_ascii=False, indent=4)
+                json.dump(current_data, f, ensure_ascii=False, indent=4)
 
-            log_callback(f"💾 Đã lưu {len(new_entries)} dòng vào JSON.")
+            log_callback(f"💾 Đã nối thêm {len(new_entries)} mục vào file JSON.")
             return True
 
         except Exception as e:
-            log_callback(f"❌ Lỗi ghi file: {e}")
+            log_callback(f"❌ Lỗi lưu file: {e}")
             return False
 
     except Exception as e:
-        log_callback(f"❌ Lỗi Selenium: {e}")
+        log_callback(f"❌ Lỗi hệ thống: {e}")
         return False

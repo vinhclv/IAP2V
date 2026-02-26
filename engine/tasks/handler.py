@@ -34,25 +34,23 @@ def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, 
         log_callback(f"▶️ [Text] Xử lý: {file_name}")
         
         try:
-            # 1. Chuẩn bị đường dẫn
+            file_name = os.path.basename(item_path)
             sub_name = os.path.splitext(file_name)[0]
-            dest_folder = os.path.join(assets_path, sub_name)
-            os.makedirs(dest_folder, exist_ok=True)
             
-            dest_img = os.path.join(dest_folder, file_name)
-            if not os.path.exists(dest_img): shutil.copy2(item_path, dest_img)
+            # --- 1. KIỂM TRA SKIP (FILE PHẲNG) ---
+            prompt_file = os.path.join(assets_path, f"{sub_name}_prompt.txt")
             
-            # 2. [SKIP] Kiểm tra nếu đã có prompt.txt rồi thì bỏ qua
-            prompt_file = os.path.join(dest_folder, "prompt.txt")
             if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 10:
-                log_callback(f"⏭️ Đã có prompt: {file_name} -> Bỏ qua.")
-                failed_list.remove(item_path)
-                consecutive_errors = 0 # Reset lỗi
+                log_callback(f"⏭️ Đã có prompt: {sub_name}_prompt.txt -> Skip.")
+                if item_path in failed_list: failed_list.remove(item_path)
                 continue
 
-            # 3. Gọi hàm xử lý core
-            success = process_image_to_prompt(driver, dest_img, dest_folder, lambda m: log_callback(m))
+            # --- 2. GỌI XỬ LÝ (DÙNG TRỰC TIẾP item_path GỐC) ---
+            log_callback(f"▶️ Đang phân tích: {file_name}")
 
+            # 3. Gọi hàm xử lý core
+            # Truyền assets_path làm thư mục đích thay vì folder con
+            success = process_image_to_prompt(driver, item_path, assets_path, lambda m: log_callback(m))
             if success:
                 log_callback(f"✅ Xong: {file_name}")
                 if item_path in failed_list: failed_list.remove(item_path)
@@ -294,35 +292,26 @@ def handle_2_image_to_prompt(driver, batch, assets_path, prefix_prompt, url, log
     MAX_CONSECUTIVE_ERRORS = 5 
     
     for item in batch:
-        pair_id = item['id']           # Ví dụ: "1-2"
-        img1_src = item['img1_path']
-        img2_src = item['img2_path']
-        dest_folder = item['output_folder']
-        prompt_file = item['prompt_file']
+        pair_id = item['pair_id']        # Ví dụ: "1-2"
+        img1_src = item['img1_path']     # Đường dẫn gốc ảnh 1
+        img2_src = item['img2_path']     # Đường dẫn gốc ảnh 2
         
-        log_callback(f"▶️ [Pair] Xử lý cặp: {pair_id} ({os.path.basename(img1_src)} & {os.path.basename(img2_src)})")
+        log_callback(f"▶️ [Pair] Đang phân tích cặp: {pair_id}")
         
         try:
-            # 1. Chuẩn bị thư mục và Copy ảnh
-            os.makedirs(dest_folder, exist_ok=True)
+            # --- 1. KIỂM TRA SKIP (FILE PHẲNG) ---
+            # File kết quả mong muốn: assets_path / 1-2_prompt.txt
+            prompt_file = os.path.join(assets_path, f"{pair_id}_prompt.txt")
             
-            # Copy 2 ảnh vào folder đích (để người dùng dễ quản lý sau này)
-            dest_img1 = os.path.join(dest_folder, os.path.basename(img1_src))
-            dest_img2 = os.path.join(dest_folder, os.path.basename(img2_src))
-            
-            if not os.path.exists(dest_img1): shutil.copy2(img1_src, dest_img1)
-            if not os.path.exists(dest_img2): shutil.copy2(img2_src, dest_img2)
-            
-            # 2. [SKIP] Kiểm tra nếu đã có prompt.txt
             if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 10:
-                log_callback(f"⏭️ Đã có prompt cặp {pair_id} -> Bỏ qua.")
+                log_callback(f"⏭️ Đã có prompt cặp {pair_id} -> Skip.")
                 if item in failed_list: failed_list.remove(item)
                 consecutive_errors = 0
                 continue
 
-            # 3. Gọi hàm xử lý core (Upload 2 ảnh và xin prompt)
-            # Lưu ý: Chúng ta gửi đường dẫn file gốc để upload cho nhanh
-            success = process_pair_images_to_prompt(driver, img1_src, img2_src, dest_folder, log_callback)
+            # --- 2. GỌI XỬ LÝ CORE ---
+            # Truyền item_path gốc và thư mục assets_path chung
+            success = process_pair_images_to_prompt(driver, img1_src, img2_src, assets_path, pair_id, log_callback)
 
             if success:
                 log_callback(f"✅ Xong cặp: {pair_id}")
