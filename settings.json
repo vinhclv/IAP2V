@@ -17,5 +17,11 @@
             "name": "prompt_",
             "url": "https://gemini.google.com/gem/4828ed7257c0/7862ad4019837d08?usp=sharing"
         }
+    ],
+    "projects": [
+        {
+            "name": "test",
+            "path": "//Synology-new/data share/Dat/init"
+        }
     ]
 }
