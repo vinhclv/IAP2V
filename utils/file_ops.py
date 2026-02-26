@@ -129,10 +129,6 @@ def get_prompt_image_status(prompt_json_path, output_root_dir):
         with open(prompt_json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # 2. Xác định thư mục chứa ảnh
-        # Tên project lấy theo tên file json input
-        project_name = os.path.splitext(os.path.basename(prompt_json_path))[0]
-        images_dir = os.path.join(output_root_dir, project_name)
 
         # 3. Duyệt qua từng item
         for item in data:
@@ -145,14 +141,14 @@ def get_prompt_image_status(prompt_json_path, output_root_dir):
             # Đường dẫn file ảnh mong đợi
             # (Bạn có thể đổi thành .png nếu tool sinh ra png)
             image_filename = f"{idx}.jpg"
-            image_path = os.path.join(images_dir, image_filename)
+            image_path = os.path.join(output_root_dir, image_filename)
 
             # Tạo object task
             task_item = {
                 "id": idx,
                 "prompt": prompt_text,
                 "save_path": image_path, # Đường dẫn lưu ảnh để Worker dùng
-                "output_folder": images_dir,
+                "output_folder": output_root_dir,
                 "type": "prompt_to_image"
             }
 
