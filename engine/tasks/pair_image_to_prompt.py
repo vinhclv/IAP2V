@@ -138,7 +138,7 @@ def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder,pa
         try:
             # Đợi số lượng tin nhắn tăng lên
             old_count = len(driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR))
-            WebDriverWait(driver, 120).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
+            WebDriverWait(driver, 40).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
             
             # Lấy tin nhắn mới nhất
             el = driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)[-1]
@@ -151,7 +151,7 @@ def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder,pa
         last_text = ""
         start_wait = time.time()
         while stable_time < 3:
-            if time.time() - start_wait > 180: break
+            if time.time() - start_wait > 30: break
             time.sleep(1)
             try:
                 curr = el.text.strip()
@@ -190,7 +190,6 @@ def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder,pa
             clean_lines.append(l)
         
         final_content = "\n".join(clean_lines)
-
         # --- BƯỚC 8: LƯU FILE ---
         # Đảm bảo folder output tồn tại
         os.makedirs(output_folder, exist_ok=True)
