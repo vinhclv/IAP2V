@@ -8,6 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import random
 from selenium.webdriver.common.action_chains import ActionChains 
+import config
 
 def robust_click(driver, element):
     try:
@@ -302,7 +303,7 @@ def process_video_batch(driver, file_batch, output_folder, log_callback=print):
     log_callback(f"⏳ Chờ render {len(tasks)} video...")
     start_time = time.time()
     
-    while time.time() - start_time < 150:
+    while time.time() - start_time < config.global_settings["system"]["wait_time"]:
         active_tasks = [uid for uid, info in tasks.items() if not info["done"]]
         if not active_tasks: 
             log_callback("✅ Tất cả video đã tải xong!")

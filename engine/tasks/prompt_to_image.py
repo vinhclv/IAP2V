@@ -8,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import glob
 import shutil
-
+import config
 
 
 def download_via_native_button(driver, save_path, download_dir_chrome, log_callback=print):
@@ -170,7 +170,7 @@ def download_via_native_button(driver, save_path, download_dir_chrome, log_callb
 
 def process_prompt_to_image(driver, item, log_callback=print):
     try:
-        wait = WebDriverWait(driver, 45)
+        wait = WebDriverWait(driver, config.global_settings["system"]["wait_time"])
         stt = item['id']
         prompt_text = item['prompt']
         save_path = item['save_path']

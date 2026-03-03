@@ -5,10 +5,10 @@ import time
 import os
 import concurrent.futures
 
-from config import MAX_RETRIES, DEFAULT_PROFILES
+from config import DEFAULT_PROFILES
 from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status, get_srt_image_status
 from engine.worker import run_worker_task
-
+import config
 class BatchProcessor:
     def __init__(self, stop_event, log_callback, update_status_callback):
         self.stop_event = stop_event
@@ -25,7 +25,7 @@ class BatchProcessor:
         with self.task_queue.mutex:
             self.task_queue.queue.clear()
 
-    def run_batch_logic(self, project_queue, loop_type, limit, threads, profiles, finished_callback):
+    def run_batch_logic(self, project_queue, loop_type, profiles, finished_callback):
         self.profile_health = {p: 0 for p in profiles}
         
         self.log(f"🚀 BẮT ĐẦU CHẠY: {len(project_queue)} DỰ ÁN", "INFO")
@@ -41,7 +41,7 @@ class BatchProcessor:
             self.update_status(idx, "Running ⏳")
             self.log(f"=== DỰ ÁN {idx+1}/{len(project_queue)}: {os.path.basename(input_path)} ===", "INFO")
             
-            self.process_one_folder(input_path, output_path, prompt, url, loop_type, limit, threads, profiles)
+            self.process_one_folder(input_path, output_path, prompt, url, loop_type, profiles)
             
             if self.stop_event.is_set():
                 self.update_status(idx, "Stopped 🛑")
@@ -52,7 +52,7 @@ class BatchProcessor:
 
         finished_callback()
 
-    def process_one_folder(self, inp, out, prompt, url, loop_type, limit, threads, profiles):
+    def process_one_folder(self, inp, out, prompt, url, loop_type, profiles):
         self.current_monitoring_info = (inp, out, loop_type)
         
         self.clear_task_queue()
@@ -77,19 +77,19 @@ class BatchProcessor:
                 self.log(f"✅ Dự án {os.path.basename(inp)} hoàn thành!", "SUCCESS")
                 break 
 
-            living_profiles = [p for p in profiles if self.profile_health.get(p, 0) < MAX_RETRIES]
+            living_profiles = [p for p in profiles if self.profile_health.get(p, 0) < config.global_settings["system"]["max_retries"]]
             if not living_profiles:
                 self.log("❌ Hết Profile sống!", "ERROR"); break
 
             while not self.task_queue.empty(): self.task_queue.get()
             for f in pending: self.task_queue.put(f)
 
-            cur_threads = min(threads, len(living_profiles))
+            cur_threads = min(config.global_settings["system"]["max_threads"], len(living_profiles))
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=cur_threads) as executor:
                 futures = []
                 for p_name in living_profiles: # run multiple profiles
-                    f = executor.submit(self.continuous_profile_runner, p_name, loop_type, inp, out, prompt, url, limit)
+                    f = executor.submit(self.continuous_profile_runner, p_name, loop_type, inp, out, prompt, url)
                     futures.append(f)
                 
                 concurrent.futures.wait(futures)
@@ -99,20 +99,20 @@ class BatchProcessor:
         
         self.current_monitoring_info = None
 
-    def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, prompt, url, limit):
+    def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, prompt, url):
         while not self.stop_event.is_set():
             fails = self.profile_health.get(profile_name, 0)
-            if fails >= MAX_RETRIES:
+            if fails >= config.global_settings["system"]["max_retries"]:
                 self.log(f"💀 Profile '{profile_name}' chết.", "ERROR"); return 
 
             candidates = []
-            
-            with self.file_lock: 
+            #srt->prompt có thể chạy nhanh nên không chia ra limit làm gì để phức tạp, chia chunk là được
+            with self.file_lock:  
                 if loop_type == "srt_prompt":
                     while not self.task_queue.empty():
                         candidates.append(self.task_queue.get())
                 else:
-                    for _ in range(limit):
+                    for _ in range(config.global_settings["system"]["loop_limit"]):
                         if not self.task_queue.empty(): candidates.append(self.task_queue.get())
                         else: break
                 

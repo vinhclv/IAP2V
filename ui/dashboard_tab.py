@@ -146,14 +146,6 @@ class DashboardTab(ttk.Frame):
         # 4. Controls
         frame_ctrl = ttk.Frame(self, padding=10); frame_ctrl.pack(fill="x")
         
-        ttk.Label(frame_ctrl, text="Batch:").pack(side="left")
-        self.spin_limit = ttk.Spinbox(frame_ctrl, from_=1, to=50, width=5); self.spin_limit.set(5)
-        self.spin_limit.pack(side="left", padx=5)
-
-        ttk.Label(frame_ctrl, text="Threads:").pack(side="left")
-        self.spin_threads = ttk.Spinbox(frame_ctrl, from_=1, to=20, width=5); self.spin_threads.set(3)
-        self.spin_threads.pack(side="left", padx=5)
-
         ttk.Separator(frame_ctrl, orient="vertical").pack(side="left", fill="y", padx=15)
         
         self.selected_mode = tk.StringVar(value="Image ➡ Prompt")

@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import config
 
 def process_srt_to_prompt(driver, chunk, log_callback=print):
     """
@@ -26,11 +27,11 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
         # --- 1. TẠO PROMPT ---
         srt_content_block = ""
         for item in chunk:
-            srt_content_block += f"ID {item['id']}: {item['text']}\n"
+            srt_content_block += f"STT {item['STT']}: {item['text']}\n"
 
         prefix_instruction = (
             "COMMAND: You must output the result strictly inside a Markdown code block (```json ... ```).\n"
-            "Include ID and all visual details. Do not include any text outside the code block."
+            "Include STT and all visual details. Do not include any text outside the code block."
         )
 
         user_prompt = f"{prefix_instruction}\n\nList:\n{srt_content_block}"
@@ -61,7 +62,7 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
             if curr_len == last_len and curr_len > 0: break
             last_len = curr_len
             time.sleep(2)
-            if time.time() - start_wait > 90: break
+            if time.time() - start_wait > config.global_settings["system"]["wait_time"]: break
 
         # --- 4. TRÍCH XUẤT CODE BLOCK ---
         code_elements = last_response_el.find_elements(By.XPATH, ".//pre/code")

@@ -7,6 +7,7 @@ from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
 from engine.tasks.srt_to_image import process_srt_item_to_image
 import time
+import config
 
 def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
     """
@@ -157,7 +158,7 @@ def handle_srt_to_prompt(driver, batch, assets_path, prefix_prompt, url, log_cal
     failed_list = list(batch)
     consecutive_errors = 0
     MAX_CONSECUTIVE_ERRORS = 3  # Ngưỡng lỗi liên tiếp (Refresh 3 lần không được thì dừng)
-    CHUNK_SIZE = 5
+    CHUNK_SIZE = config.global_settings["system"]["loop_limit"]
 
     # Chia batch thành các chunk
     chunks = [batch[i:i + CHUNK_SIZE] for i in range(0, len(batch), CHUNK_SIZE)]
@@ -166,7 +167,7 @@ def handle_srt_to_prompt(driver, batch, assets_path, prefix_prompt, url, log_cal
     for chunk in chunks:
         
         # Lấy ID đầu/cuối để log cho dễ nhìn
-        chunk_ids = [item['id'] for item in chunk]
+        chunk_ids = [item['STT'] for item in chunk]
         
         # [QUAN TRỌNG] Vòng lặp While để Retry lại chính Chunk này nếu lỗi
         while True:

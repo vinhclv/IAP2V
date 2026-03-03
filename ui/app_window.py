@@ -86,14 +86,8 @@ class BatchApp:
             messagebox.showwarning("Trống", "Thêm dự án vào list trước!")
             return
         
-        # 2. Lấy tham số chạy
-        try:
-            limit = int(self.tab_dashboard.spin_limit.get())
-            threads = int(self.tab_dashboard.spin_threads.get())
-            mode_text = self.tab_dashboard.selected_mode.get()
-        except:
-            limit, threads = 5, 3
-            mode_text = "Image ➡ Prompt"
+        mode_text = self.tab_dashboard.selected_mode.get()
+
 
         # Map Text sang Key Logic
         mode_map = {
@@ -121,7 +115,7 @@ class BatchApp:
         # 5. Chạy luồng xử lý chính
         t_main = threading.Thread(
             target=self.processor.run_batch_logic,
-            args=(queue_data, loop_type, limit, threads, profiles, self.on_batch_finished),
+            args=(queue_data, loop_type, profiles, self.on_batch_finished),
             daemon=True
         )
         t_main.start()

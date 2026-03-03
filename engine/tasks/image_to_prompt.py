@@ -6,7 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
+import config
 def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=print):
     """
     CHIẾN THUẬT: FAKE PASTE (GIẢ LẬP CTRL+V)
@@ -131,7 +131,7 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
         log_callback("⏳ Đang đợi Gemini trả lời...")
         RESPONSE_SELECTOR = "div.markdown-main-panel[id^='model-response-message-content']"
         old_count = len(driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR))
-        WebDriverWait(driver, 40).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
+        WebDriverWait(driver, config.global_settings["system"]["wait_time"]).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
         
         el = driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)[-1]
         
@@ -140,7 +140,7 @@ def process_image_to_prompt(driver, image_path, output_subfolder, log_callback=p
         last_text = ""
         start_wait = time.time()
         while stable_time < 3:
-            if time.time() - start_wait > 20: break
+            if time.time() - start_wait > 30: break
             time.sleep(1)
             try:
                 curr = el.text.strip()

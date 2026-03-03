@@ -94,7 +94,7 @@ def get_srt_prompt_status(srt_path, output_dir):
             text = text.strip().replace('\n', ' ')
             
             task_item = {
-                "id": idx,           
+                "STT": idx,           
                 "text": text,
                 "json_path": json_output_path, 
             }

@@ -9,7 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 import glob
 import shutil
-
+import config
 
 def download_via_native_button(driver, save_path, download_dir_chrome, log_callback=print):
     """ 
@@ -174,7 +174,7 @@ def process_srt_item_to_image(driver, item, log_callback=print):
     Nhận text từ SRT, tự động thêm style điện ảnh và vẽ ảnh.
     """
     try:
-        wait = WebDriverWait(driver, 45)
+        wait = WebDriverWait(driver, config.global_settings["system"]["wait_time"])
         
         # Giải nén dữ liệu
         stt = item['id']

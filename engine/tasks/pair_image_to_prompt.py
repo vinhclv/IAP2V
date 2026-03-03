@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import config
 
 def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder,pair_id, log_callback=print):
     """
@@ -138,7 +139,7 @@ def process_pair_images_to_prompt(driver, img1_path, img2_path, output_folder,pa
         try:
             # Đợi số lượng tin nhắn tăng lên
             old_count = len(driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR))
-            WebDriverWait(driver, 40).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
+            WebDriverWait(driver, config.global_settings["system"]["wait_time"]).until(lambda d: len(d.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)) > old_count)
             
             # Lấy tin nhắn mới nhất
             el = driver.find_elements(By.CSS_SELECTOR, RESPONSE_SELECTOR)[-1]
