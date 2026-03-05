@@ -12,8 +12,6 @@ SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
 ORBITA_PATH = os.path.join(BASE_DIR, "orbita-browser-141", "chrome.exe")
 DRIVER_PATH = os.path.join(BASE_DIR, "orbita-browser-141", "chromedriver.exe")
 
-MAX_RETRIES = 30
-
 # --- 2. CẤU HÌNH MẶC ĐỊNH ---
 DEFAULT_CONFIG_DATA = {
     "system": {
@@ -27,7 +25,19 @@ DEFAULT_CONFIG_DATA = {
         "videofx_url": "https://labs.google/fx/tools/video-fx"
     },
     "projects": [], # Danh sách dự án
-    "gems": []      # Danh sách Gem
+    "gems": [],     # Danh sách Gem,
+    # ---- THÊM ĐOẠN NÀY DÀNH CHO STANDARDIZE TAB ----
+    "standardize": {
+    "api_key": "YOUR_API_KEY_HERE",
+    "languages": [
+        {"name": "Anh", "code": "en"},
+        {"name": "Hàn", "code": "ko"},
+        {"name": "Trung", "code": "zh"},
+        {"name": "Nhật", "code": "ja"},
+        {"name": "Việt", "code": "vi"},
+        {"name": "Pháp", "code": "fr"}
+    ]
+    }
 }
 
 # --- 3. BIẾN TOÀN CỤC (Lưu cấu hình trong RAM) ---

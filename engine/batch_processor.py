@@ -6,7 +6,7 @@ import os
 import concurrent.futures
 
 from config import DEFAULT_PROFILES
-from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status, get_srt_image_status
+from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status, get_srt_image_status, get_srt_multilanguage_status
 from engine.worker import run_worker_task
 import config
 class BatchProcessor:
@@ -24,7 +24,7 @@ class BatchProcessor:
     def clear_task_queue(self):
         with self.task_queue.mutex:
             self.task_queue.queue.clear()
-
+ 
     def run_batch_logic(self, project_queue, loop_type, profiles, finished_callback):
         self.profile_health = {p: 0 for p in profiles}
         
@@ -37,11 +37,12 @@ class BatchProcessor:
             output_path = project["output"]
             prompt = project["prompt"]
             url = project["url"]
+            languages = project["languages"]
             
             self.update_status(idx, "Running ⏳")
             self.log(f"=== DỰ ÁN {idx+1}/{len(project_queue)}: {os.path.basename(input_path)} ===", "INFO")
             
-            self.process_one_folder(input_path, output_path, prompt, url, loop_type, profiles)
+            self.process_one_folder(input_path, output_path, prompt, url, languages, loop_type, profiles)
             
             if self.stop_event.is_set():
                 self.update_status(idx, "Stopped 🛑")
@@ -52,8 +53,8 @@ class BatchProcessor:
 
         finished_callback()
 
-    def process_one_folder(self, inp, out, prompt, url, loop_type, profiles):
-        self.current_monitoring_info = (inp, out, loop_type)
+    def process_one_folder(self, inp, out, prompt, url, languages, loop_type, profiles):
+        self.current_monitoring_info = (inp, out, loop_type, languages)
         
         self.clear_task_queue()
         self.log(f"🔍 Bắt đầu xử lý: {os.path.basename(inp)}", "INFO")
@@ -70,6 +71,8 @@ class BatchProcessor:
                     pending, _ = get_2_image_prompt_status(inp, out)
                 case "srt_image":
                     pending, _ = get_srt_image_status(inp, out)
+                case "srt_multilanguage":
+                    pending, _ = get_srt_multilanguage_status(inp, out, languages)
                 case _:
                     pending, _ = get_prompt_video_status(out)
 
@@ -89,7 +92,7 @@ class BatchProcessor:
             with concurrent.futures.ThreadPoolExecutor(max_workers=cur_threads) as executor:
                 futures = []
                 for p_name in living_profiles: # run multiple profiles
-                    f = executor.submit(self.continuous_profile_runner, p_name, loop_type, inp, out, prompt, url)
+                    f = executor.submit(self.continuous_profile_runner, p_name, loop_type, inp, out, prompt, url, languages)
                     futures.append(f)
                 
                 concurrent.futures.wait(futures)
@@ -99,7 +102,7 @@ class BatchProcessor:
         
         self.current_monitoring_info = None
 
-    def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, prompt, url):
+    def continuous_profile_runner(self, profile_name, loop_type, inp_path, out_path, prompt, url, languages):
         while not self.stop_event.is_set():
             fails = self.profile_health.get(profile_name, 0)
             if fails >= config.global_settings["system"]["max_retries"]:
@@ -134,6 +137,9 @@ class BatchProcessor:
                     case "srt_image":
                         actual_pending, _ = get_srt_image_status(inp_path, out_path)
                         batch = [item for item in candidates if item in actual_pending]
+                    case "srt_multilanguage":
+                        actual_pending, _ = get_srt_multilanguage_status(inp_path, out_path, languages)
+                        batch = [item for item in candidates if item in actual_pending]
                     case _: # prompt_video 
                         actual_pending, _ = get_prompt_video_status(out_path)
                         batch = [item for item in candidates if item in actual_pending]
@@ -157,7 +163,7 @@ class BatchProcessor:
         while True:
             if self.current_monitoring_info:
                 try:
-                    inp, out, loop_type = self.current_monitoring_info
+                    inp, out, loop_type, languages = self.current_monitoring_info
                     
                     match loop_type:
                         case "image_prompt":
@@ -170,6 +176,8 @@ class BatchProcessor:
                             pending, completed = get_2_image_prompt_status(inp, out)
                         case "srt_image":
                             pending, completed = get_srt_image_status(inp, out)
+                        case "srt_multilanguage":
+                            pending, completed = get_srt_multilanguage_status(inp, out, languages)
                         case _: # prompt_video
                             pending, completed = get_prompt_video_status(out)
 

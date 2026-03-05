@@ -4,11 +4,9 @@ import threading
 from datetime import datetime
 import sv_ttk
 import queue
-import os # Cần import os để xử lý đường dẫn
+import os 
 
-# --- SỬA IMPORT ---
 from config import DEFAULT_PROFILES
-# Import đúng tên class ProfileManagerTab
 from ui.profile_tab import ProfileManagerTab  
 from ui.dashboard_tab import DashboardTab      
 from ui.settings_tab import SettingsTab       
@@ -96,7 +94,8 @@ class BatchApp:
             "SRT ➡ Prompt": "srt_prompt",
             "Prompt ➡ Image": "prompt_image",
             "2_Image ➡ Prompt": "2_image_prompt",
-            "SRT ➡ Image": "srt_image"
+            "SRT ➡ Image": "srt_image",
+            "SRT ➡ Multilanguage": "srt_multilanguage"
         }
         loop_type = mode_map.get(mode_text, "image_prompt")
 

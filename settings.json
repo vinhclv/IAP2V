@@ -3,13 +3,18 @@
         "max_threads": 3,
         "loop_limit": 2,
         "max_retries": 10,
-        "wait_time": 10
+        "wait_time": 50
     },
     "urls": {
         "gemini_url": "https://gemini.google.com",
         "videofx_url": "https://labs.google/fx/tools/video-fx"
     },
-    "projects": [],
+    "projects": [
+        {
+            "name": "test",
+            "path": "//192.168.1.17/data share/Dat/init"
+        }
+    ],
     "gems": [
         {
             "name": "srt->prompt",
@@ -22,6 +27,43 @@
         {
             "name": "image->prompt",
             "url": "https://gemini.google.com/gem/1eGtVu5CR6oCr6OM3Ynf_RCQjvYOHtoEz?usp=sharing"
+        },
+        {
+            "name": "srt->mul",
+            "url": "https://gemini.google.com"
+        },
+        {
+            "name": "tes",
+            "url": "tttt"
         }
-    ]
+    ],
+    "standardize": {
+        "api_key": "YOUR_API_KEY_HERE",
+        "languages": [
+            {
+                "name": "Anh",
+                "code": "en"
+            },
+            {
+                "name": "Hàn",
+                "code": "ko"
+            },
+            {
+                "name": "Trung",
+                "code": "zh"
+            },
+            {
+                "name": "Nhật",
+                "code": "ja"
+            },
+            {
+                "name": "Việt",
+                "code": "vi"
+            },
+            {
+                "name": "Pháp",
+                "code": "fr"
+            }
+        ]
+    }
 }

@@ -279,3 +279,55 @@ def get_srt_image_status(srt_path, output_dir):
         print(f"❌ Lỗi xử lý file SRT: {e}")
 
     return pending, completed   
+
+def get_srt_multilanguage_status(srt_path, output_dir, languages):
+    pending, completed = [], []
+
+    # Kiểm tra xem đây có phải là file hợp lệ không
+    if not os.path.isfile(srt_path) or not srt_path.lower().endswith('.srt'):
+        return [], []
+
+    try:
+        # Xử lý đường dẫn dài
+        safe_srt_path = srt_path
+
+        with open(safe_srt_path, 'r', encoding='utf-8') as f:
+            original_content = f.read()
+
+        pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\d+\n|\Z)', re.DOTALL)
+        
+        raw_blocks = [match.group(0) for match in pattern.finditer(original_content)]
+        original_count = len(raw_blocks)
+
+        if original_count == 0: return [], []
+
+        base_name = os.path.splitext(os.path.basename(srt_path))[0]
+
+        for lang in languages:
+            out_filename = f"{base_name}_{lang}.srt"
+            out_filepath = os.path.join(output_dir, out_filename)
+
+            task_item = {
+                "id": f"{base_name}_{lang}",
+                "srt_path": srt_path,
+                "lang": lang,
+                "save_path": out_filepath,
+                "original_count": original_count
+            }
+
+            is_done = False
+            if os.path.exists(out_filepath) and os.path.getsize(out_filepath) > 0:
+                with open(out_filepath, 'r', encoding='utf-8') as f_out:
+                    out_content = f_out.read()
+                out_count = len(pattern.findall(out_content))
+                
+                if out_count == original_count:
+                    is_done = True
+
+            if is_done: completed.append(task_item)
+            else: pending.append(task_item)
+
+    except Exception as e:
+        print(f"Lỗi: {e}")
+
+    return pending, completed

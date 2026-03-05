@@ -6,7 +6,9 @@ from engine.tasks.srt_to_prompt import process_srt_to_prompt
 from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
 from engine.tasks.srt_to_image import process_srt_item_to_image
+from engine.tasks.srt_to_multilanguage import process_srt_multilanguage
 import time
+import re
 import config
 
 def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
@@ -414,6 +416,126 @@ def handle_srt_to_image(driver, batch, assets_path, prefix_prompt, url, log_call
             driver.refresh()
             time.sleep(5)
 
+    if len(failed_list) == len(batch):
+        return False, failed_list
+
+    return True, failed_list
+
+def handle_srt_multilanguage(driver, batch, assets_path, prefix_prompt, url, log_callback):
+    """
+    Xử lý danh sách các Task dịch đa ngôn ngữ.
+    Mỗi item trong batch đại diện cho 1 ngôn ngữ của 1 file SRT gốc.
+    """
+    try:
+        if "gemini.google.com" not in driver.current_url:
+            driver.get(url)
+            time.sleep(5)
+    except Exception as e:
+        log_callback(f"❌ Lỗi mở trang: {e}")
+        return False, batch
+
+    if "accounts.google.com" in driver.current_url:
+        log_callback("❌ Profile bị logout -> Dừng.")
+        return False, batch
+
+    failed_list = list(batch)
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 3 
+
+    # Lặp qua từng Task (Từng yêu cầu dịch file sang 1 ngôn ngữ)
+    for task_item in batch:
+        srt_path = task_item['srt_path']
+        lang = task_item['lang']
+        save_path = task_item['save_path']
+        
+        log_callback(f"▶️ Bắt đầu dịch: {os.path.basename(srt_path)} -> {lang}")
+
+        # 1. Đọc nội dung file gốc để lấy các block SRT
+        try:
+            with open(srt_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\d+\n|\Z)', re.DOTALL)
+            # Lấy nguyên cục block text
+            raw_blocks = [match.group(0) for match in pattern.finditer(content)]
+        except Exception as e:
+            log_callback(f"❌ Lỗi đọc file gốc: {e}")
+            consecutive_errors += 1
+            continue
+
+        # Nếu file đích đã có nội dung (do đang dịch dở bị đứt mạng), ta cần tính xem đã dịch đến đâu
+        # Để không phải dịch lại từ đầu
+        start_index = 0
+        if os.path.exists(save_path):
+            try:
+                with open(save_path, 'r', encoding='utf-8') as f_out:
+                    out_content = f_out.read()
+                out_matches = pattern.findall(out_content)
+                start_index = len(out_matches)
+                if start_index > 0:
+                    log_callback(f"⏭️ File đã dịch {start_index}/{len(raw_blocks)} câu. Tiếp tục dịch phần còn lại...")
+            except: pass
+
+        blocks_to_translate = raw_blocks[start_index:]
+        if not blocks_to_translate:
+            log_callback(f"✅ File {lang} đã hoàn thành trước đó.")
+            if task_item in failed_list: failed_list.remove(task_item)
+            continue
+
+        # 2. CHIA CHUNK NỘI DUNG BÊN TRONG FILE
+        LINES_PER_CHUNK = config.global_settings["system"].get("chunk_size", 20)
+        content_chunks = [blocks_to_translate[i:i + LINES_PER_CHUNK] for i in range(0, len(blocks_to_translate), LINES_PER_CHUNK)]
+
+        task_success = True
+
+        for chunk_idx, content_chunk in enumerate(content_chunks):
+            # Tạo data payload cho hàm process core
+            # Hàm process_srt_multilanguage yêu cầu đầu vào là list dict có chứa 'lang', 'save_path' và 'raw_block'
+            chunk_payload = []
+            for block in content_chunk:
+                chunk_payload.append({
+                    "lang": lang,
+                    "save_path": save_path,
+                    "raw_block": block
+                })
+
+            log_callback(f"🔄 Đang gửi phần {chunk_idx + 1}/{len(content_chunks)} lên Gemini...")
+            
+            # [QUAN TRỌNG] Vòng lặp Retry cho 1 Chunk nội dung
+            chunk_retry = 0
+            chunk_ok = False
+            while chunk_retry < MAX_CONSECUTIVE_ERRORS:
+                # Gọi hàm core bạn đã viết ở bước trước
+                success = process_srt_multilanguage(driver, chunk_payload, log_callback)
+
+                if success:
+                    consecutive_errors = 0
+                    chunk_ok = True
+                    break # Thoát vòng lặp retry
+                else:
+                    chunk_retry += 1
+                    consecutive_errors += 1
+                    log_callback(f"⚠️ Lỗi phần {chunk_idx + 1} (Lần {chunk_retry}/{MAX_CONSECUTIVE_ERRORS})")
+                    
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                        log_callback("💀 Profile lỗi liên tục -> Dừng.")
+                        return False, failed_list
+                    
+                    driver.refresh()
+                    time.sleep(5)
+            
+            # Nếu retry đủ 3 lần mà cái phần nhỏ này vẫn fail -> Cả cái Task file này coi như Fail
+            if not chunk_ok:
+                task_success = False
+                break 
+
+        # 3. Kết luận cho Task File này
+        if task_success:
+            log_callback(f"🎉 Hoàn thành xuất sắc bản dịch: {lang}")
+            if task_item in failed_list: failed_list.remove(task_item)
+        else:
+            log_callback(f"❌ Thất bại khi dịch bản {lang}.")
+
+    # 4. Kiểm tra tổng kết Profile
     if len(failed_list) == len(batch):
         return False, failed_list
 
