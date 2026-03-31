@@ -5,7 +5,6 @@ import os
 
 from config import DEFAULT_INPUT, DEFAULT_OUTPUT, load_config, global_settings
 
-# Đường dẫn file settings để đọc danh sách Gem
 SETTINGS_FILE = "settings.json"
 
 class DashboardTab(ttk.Frame):
@@ -14,30 +13,35 @@ class DashboardTab(ttk.Frame):
         self.controller = controller 
         self.project_queue = []
         
-        # Biến lưu trữ checkbox ngôn ngữ
         self.lang_vars = {}
-        # Biến lưu trữ checkbox Gem cho chế độ Shuffle
         self.gem_vars = {}
-        # Lấy settings từ config global
+        
         self.settings = global_settings
         self.lang_objects = self.settings.get("standardize", {}).get("languages", [])
-        
-        # Load danh sách Gem từ file settings
         self.gems_data = self._load_gems_from_settings()
         
+        # Gọi hàm setup giao diện đã được chia nhỏ
         self._setup_ui()
         self._load_defaults() 
-        
-        # Chạy kiểm tra mode lần đầu để ẩn/hiện đúng trạng thái ban đầu
         self._on_mode_change(None)
 
     def _load_gems_from_settings(self):
-        """Lấy danh sách Gem siêu tốc từ RAM thay vì đọc ổ đĩa"""
+        """Lấy danh sách Gem siêu tốc từ RAM"""
         return global_settings.get("gems", [])
 
+    # ==========================================
+    # PHẦN 1: QUẢN LÝ VẼ GIAO DIỆN (UI BUILDERS)
+    # ==========================================
     def _setup_ui(self):
+        """Khởi tạo toàn bộ UI bằng cách gọi các block nhỏ"""
+        self._build_top_controls()
+        self._build_dynamic_options()
+        self._build_add_project_form()
+        self._build_dashboard_stats()
+        self._build_queue_treeview()
 
-        # 4. CONTROLS & MULTILANGUAGE OPTION
+    def _build_top_controls(self):
+        """Khối 1: Chọn chế độ và nút Run/Stop"""
         self.frame_ctrl = ttk.Frame(self, padding=10)
         self.frame_ctrl.pack(fill="x")
         
@@ -46,55 +50,45 @@ class DashboardTab(ttk.Frame):
         self.selected_mode = tk.StringVar(value="Image ➡ Prompt")
         self.cbo_mode = ttk.Combobox(self.frame_ctrl, textvariable=self.selected_mode, state="readonly", width=25)
         self.cbo_mode['values'] = (
-            "Image ➡ Prompt", 
-            "Prompt ➡ Video", 
-            "SRT ➡ Prompt", 
-            "Prompt ➡ Image", 
-            "2_Image ➡ Prompt", 
-            "SRT ➡ Image",
-            "SRT ➡ Multilanguage",
-            "SRT ➡ Shuffle"
+            "Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", 
+            "Prompt ➡ Image", "2_Image ➡ Prompt", "SRT ➡ Image",
+            "SRT ➡ Multilanguage", "SRT ➡ Shuffle"
         )
         self.cbo_mode.pack(side="left", padx=5)
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
 
-        # Khối chọn ngôn ngữ (Mặc định ẩn)
-        self.frame_langs = ttk.LabelFrame(self, text="🌐 Chọn ngôn ngữ chuẩn hóa", padding=10)
+        self.btn_run = ttk.Button(self.frame_ctrl, text="▶ CHẠY LIST", style="Accent.TButton", command=self.controller.on_start_batch)
+        self.btn_run.pack(side="left", padx=20)
         
+        self.btn_stop = ttk.Button(self.frame_ctrl, text="🛑 DỪNG", command=self.controller.stop_process, state="disabled")
+        self.btn_stop.pack(side="right")
+
+    def _build_dynamic_options(self):
+        """Khối 2: Các checkbox ẩn/hiện động (Ngôn ngữ & Shuffle)"""
+        # Form Ngôn ngữ
+        self.frame_langs = ttk.LabelFrame(self, text="🌐 Chọn ngôn ngữ chuẩn hóa", padding=10)
         cb_container = ttk.Frame(self.frame_langs)
         cb_container.pack(fill="x")
-
         for i, lang in enumerate(self.lang_objects):
             var = tk.BooleanVar(value=False)
             self.lang_vars[lang["code"]] = var
             cb = ttk.Checkbutton(cb_container, text=lang["name"], variable=var)
             cb.grid(row=i // 5, column=i % 5, sticky="w", padx=15, pady=2)
 
-
-        # Khối chọn GEM cho Shuffle (Mặc định ẩn)
+        # Form Shuffle
         self.frame_shuffle = ttk.LabelFrame(self, text="🔀 Chọn các GEM để Shuffle", padding=10)
         cb_shuffle_container = ttk.Frame(self.frame_shuffle)
         cb_shuffle_container.pack(fill="x")
-        
-        # Duyệt qua danh sách gems lấy từ settings
         for i, gem in enumerate(self.gems_data):
             var = tk.BooleanVar(value=False)
             self.gem_vars[gem["name"]] = var
             cb = ttk.Checkbutton(cb_shuffle_container, text=gem["name"], variable=var)
             cb.grid(row=i // 5, column=i % 5, sticky="w", padx=15, pady=2)
 
-        # Nút chạy đặt ở frame_ctrl
-        self.btn_run = ttk.Button(self.frame_ctrl, text="▶ CHẠY LIST", style="Accent.TButton", command=self.controller.on_start_batch)
-        self.btn_run.pack(side="left", padx=20)
-        
-        self.btn_stop = ttk.Button(self.frame_ctrl, text="🛑 DỪNG", command=self.controller.stop_process, state="disabled")
-        self.btn_stop.pack(side="right")
-        
-        # 1. KHỐI THÊM DỰ ÁN
+    def _build_add_project_form(self):
+        """Khối 3: Thêm Input/Output/GEM"""
         frame_add = ttk.LabelFrame(self, text="➕ Thêm Dự án", padding=10)
         frame_add.pack(fill="x", padx=10, pady=5)
-
-        # Cấu hình grid cho frame_add
         frame_add.columnconfigure(1, weight=1)
         
         # Input
@@ -132,24 +126,28 @@ class DashboardTab(ttk.Frame):
         self.btn_add = ttk.Button(frame_add, text="⬇ THÊM", command=self.add_project_to_queue)
         self.btn_add.grid(row=0, column=3, rowspan=3, padx=10, sticky="ns")
 
-        # 2. DASHBOARD STATS
+    def _build_dashboard_stats(self):
+        """Khối 4: Hiển thị thống kê số lượng task"""
         frame_dash = ttk.LabelFrame(self, text="📊 Tiến độ Real-time", padding=15)
         frame_dash.pack(fill="x", padx=10, pady=5)
         for i in range(3): frame_dash.columnconfigure(i, weight=1)
 
-        f1 = ttk.Frame(frame_dash); f1.grid(row=0, column=0)
-        self.lbl_total = ttk.Label(f1, text="0", font=("Segoe UI", 24, "bold"), foreground="#888888")
-        self.lbl_total.pack(); ttk.Label(f1, text="TỔNG FILE").pack()
+        def create_stat_box(parent, col, title, color):
+            f = ttk.Frame(parent)
+            f.grid(row=0, column=col)
+            lbl = ttk.Label(f, text="0", font=("Segoe UI", 24, "bold"), foreground=color)
+            lbl.pack()
+            ttk.Label(f, text=title).pack()
+            return lbl
 
-        f2 = ttk.Frame(frame_dash); f2.grid(row=0, column=1)
-        self.lbl_pending = ttk.Label(f2, text="0", font=("Segoe UI", 32, "bold"), foreground="#ffaa00")
-        self.lbl_pending.pack(); ttk.Label(f2, text="CẦN LÀM").pack()
+        self.lbl_total = create_stat_box(frame_dash, 0, "TỔNG", "#888888")
+        self.lbl_pending = create_stat_box(frame_dash, 1, "CẦN LÀM", "#ffaa00")
+        self.lbl_done = create_stat_box(frame_dash, 2, "ĐÃ XONG", "#00cc6a")
+        # Chỉnh font riêng cho Pending to hơn
+        self.lbl_pending.config(font=("Segoe UI", 32, "bold"))
 
-        f3 = ttk.Frame(frame_dash); f3.grid(row=0, column=2)
-        self.lbl_done = ttk.Label(f3, text="0", font=("Segoe UI", 24, "bold"), foreground="#00cc6a")
-        self.lbl_done.pack(); ttk.Label(f3, text="ĐÃ XONG").pack()
-
-        # 3. HÀNG CHỜ (TREEVIEW)
+    def _build_queue_treeview(self):
+        """Khối 5: Bảng danh sách hàng chờ"""
         frame_list = ttk.LabelFrame(self, text="📋 Hàng chờ", padding=10)
         frame_list.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -170,14 +168,12 @@ class DashboardTab(ttk.Frame):
         ttk.Button(frame_act, text="❌ Xóa", command=self.remove_selected_project).pack(side="right")
         ttk.Button(frame_act, text="🧹 Xóa hết", command=self.clear_all_projects).pack(side="right", padx=5)
 
-        
 
-    # --- LOGIC ẨN/HIỆN ---
+    # ==========================================
+    # PHẦN 2: XỬ LÝ LOGIC SỰ KIỆN (EVENT HANDLERS)
+    # ==========================================
     def _on_mode_change(self, event):
-        """Kiểm tra mode để hiện/ẩn checkbox ngôn ngữ hoặc shuffle gems"""
         mode = self.selected_mode.get()
-        
-        # Ẩn cả 2 khung trước
         self.frame_langs.pack_forget()
         self.frame_shuffle.pack_forget()
         
@@ -186,22 +182,18 @@ class DashboardTab(ttk.Frame):
         elif mode == "SRT ➡ Shuffle":
             self.frame_shuffle.pack(fill="x", padx=10, pady=5, after=self.frame_ctrl)
 
-    # --- INPUT HANDLERS & PROJECT QUEUE ---
     def _pick_input(self):
         mode = self.selected_mode.get()
-        # MỚI: Thêm "SRT ➡ Shuffle" vào danh sách file_modes
         file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle"]
         
         if mode in file_modes:
-            if "SRT" in mode:
-                f = filedialog.askopenfilename(title="Chọn file SRT", filetypes=[("SRT Files", "*.srt")])
-            else:
-                f = filedialog.askopenfilename(title="Chọn file Prompt", filetypes=[("JSON/TXT", "*.json *.txt")])
+            f = filedialog.askopenfilename(title="Chọn file", filetypes=[("SRT Files", "*.srt")] if "SRT" in mode else [("JSON/TXT", "*.json *.txt")])
         else:
             f = filedialog.askdirectory(title="Chọn thư mục Input")
             
         if f:
-            self.entry_in.delete(0, tk.END); self.entry_in.insert(0, f)
+            self.entry_in.delete(0, tk.END)
+            self.entry_in.insert(0, f)
 
     def add_project_to_queue(self):
         inp = self.entry_in.get().strip()
@@ -215,41 +207,32 @@ class DashboardTab(ttk.Frame):
             messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập đầy đủ Input, Output và chọn GEM!")
             return
 
-        # Lấy URL thực tế
-        real_url = next((g["url"] for g in self.gems_data if g["name"] == gem_name), "https://gemini.google.com")
-
-        # Nếu là mode Multilanguage, kiểm tra xem đã chọn ngôn ngữ nào chưa
         selected_langs = []
         if mode == "SRT ➡ Multilanguage":
             selected_langs = [code for code, var in self.lang_vars.items() if var.get()]
             if not selected_langs:
-                messagebox.showwarning("Thiếu ngôn ngữ", "Vui lòng chọn ít nhất 1 ngôn ngữ để chuẩn hóa!")
+                messagebox.showwarning("Thiếu ngôn ngữ", "Vui lòng chọn ít nhất 1 ngôn ngữ!")
                 return
-        # Nếu là mode Shuffle, lấy danh sách các GEM được chọn
+
         selected_shuffle_gems = []
         if mode == "SRT ➡ Shuffle":
-            # Lấy toàn bộ object gem nếu tick chọn (để dễ lấy URL sau này), hoặc chỉ lấy tên tuỳ bạn
-            # Ở đây tôi lưu lại list các dictionary của Gem đã được tick
             selected_shuffle_gems = [gem for gem in self.gems_data if self.gem_vars[gem["name"]].get()]
             if not selected_shuffle_gems:
                 messagebox.showwarning("Thiếu thông tin", "Vui lòng chọn ít nhất 1 GEM để Shuffle!")
                 return
 
-        task_item = {
-            "input": inp,
-            "output": out,
-            "url": real_url,
-            "gem_name": gem_name,
-            "prompt": prompt_val,
-            "languages": selected_langs, # Lưu danh sách ngôn ngữ vào task
-            "shuffle_gems": selected_shuffle_gems, # Lưu danh sách Gem đã chọn vào task
-            "status": "Waiting"
-        }
-        
-        self.project_queue.append(task_item)
+        real_url = next((g["url"] for g in self.gems_data if g["name"] == gem_name), "https://gemini.google.com")
+
+        self.project_queue.append({
+            "input": inp, "output": out, "url": real_url, "gem_name": gem_name,
+            "prompt": prompt_val, "languages": selected_langs, 
+            "shuffle_gems": selected_shuffle_gems, "status": "Waiting"
+        })
         self.refresh_treeview()
 
-    # --- PHẦN CÒN LẠI GIỮ NGUYÊN ---
+    # ==========================================
+    # PHẦN 3: CÁC HÀM TIỆN ÍCH (UTILITIES)
+    # ==========================================
     def _set_placeholder(self, entry, text):
         entry.insert(0, text); entry.config(foreground="grey")
         entry.bind("<FocusIn>", lambda e: self._clear_placeholder(e, text))
@@ -264,19 +247,19 @@ class DashboardTab(ttk.Frame):
             event.widget.insert(0, text); event.widget.config(foreground="grey")
 
     def _pick_folder(self, entry):
-        d = filedialog.askdirectory(); 
+        d = filedialog.askdirectory()
         if d: entry.delete(0, tk.END); entry.insert(0, d)
 
     def remove_selected_project(self):
         sel = self.tree.selection()
         if sel:
             for item in reversed(sel):
-                idx = self.tree.index(item)
-                del self.project_queue[idx]
+                del self.project_queue[self.tree.index(item)]
             self.refresh_treeview()
 
     def clear_all_projects(self):
-        self.project_queue = []; self.refresh_treeview()
+        self.project_queue.clear()
+        self.refresh_treeview()
 
     def refresh_treeview(self):
         for item in self.tree.get_children(): self.tree.delete(item)
@@ -284,7 +267,7 @@ class DashboardTab(ttk.Frame):
             self.tree.insert("", "end", values=(i+1, p["input"], p["output"], p["gem_name"], p["prompt"], p["status"]))
 
     def _load_defaults(self):
-        pass # Có thể thêm logic load từ config nếu cần
+        pass
 
     def refresh_gem_list(self):
         self.gems_data = self._load_gems_from_settings()
@@ -294,12 +277,12 @@ class DashboardTab(ttk.Frame):
             self.cbo_gem_url['values'] = gem_names
             if gem_names and (not current or current not in gem_names):
                 self.cbo_gem_url.current(0)
+
     def update_project_status(self, index, status):
         if 0 <= index < len(self.project_queue):
             self.project_queue[index]["status"] = status
             try:
-                child_id = self.tree.get_children()[index]
-                self.tree.set(child_id, "status", status)
+                self.tree.set(self.tree.get_children()[index], "status", status)
             except: pass
 
     def update_dashboard_stats(self, total, pending, done):
@@ -308,7 +291,6 @@ class DashboardTab(ttk.Frame):
         self.lbl_done.config(text=f"{done}")
 
     def toggle_buttons(self, is_running):
-        s = "disabled" if is_running else "normal"
-        self.btn_run.config(state=s)
+        self.btn_run.config(state="disabled" if is_running else "normal")
         self.btn_stop.config(state="normal" if is_running else "disabled")
         self.cbo_mode.config(state="disabled" if is_running else "readonly")
