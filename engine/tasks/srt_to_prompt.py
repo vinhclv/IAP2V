@@ -19,7 +19,7 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
     try:
         wait = WebDriverWait(driver, 30)
         
-        json_output_path = chunk[0].get('json_path')
+        json_output_path = chunk[0].get('json_path') #Lấy đường dẫn file json từ chunk
         if not json_output_path:
             log_callback("❌ Không tìm thấy đường dẫn json_path.")
             return False

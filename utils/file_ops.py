@@ -331,3 +331,66 @@ def get_srt_multilanguage_status(srt_path, output_dir, languages):
         print(f"Lỗi: {e}")
 
     return pending, completed
+
+def get_srt_shuffle_status(srt_path, output_dir, shuffle_gems):
+    """
+    Kiểm tra trạng thái xáo trộn (Shuffle) cho từng dòng trong file SRT.
+    Dựa trên file JSON tổng nằm trong output_dir.
+    Ví dụ: input là 'movie.srt' -> output check 'output_dir/movie_shuffle.json'
+    """
+    pending = []
+    completed = []
+
+    if not os.path.exists(srt_path):
+        return [], []
+
+    try:
+        # 1. Đọc nội dung SRT gốc
+        with open(srt_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Regex tách các đoạn sub
+        pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\d+\n|\Z)', re.DOTALL)
+        matches = pattern.findall(content)
+
+        # 2. Xác định file JSON Output
+        srt_name = os.path.splitext(os.path.basename(srt_path))[0]
+        json_output_path = os.path.join(output_dir, f"{srt_name}_shuffle.json")
+
+        # 3. Lấy danh sách các STT đã làm xong từ file JSON tổng (nếu có)
+        completed_ids = set()
+        if os.path.exists(json_output_path):
+            try:
+                with open(json_output_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Giả sử cấu trúc JSON lưu lại kết quả: 
+                    # [{"STT": "1", "text": "...", "gem_used": "srt->prompt", "shuffled_result": "..."}, ...]
+                    if isinstance(data, list):
+                        for item in data:
+                            if "STT" in item:
+                                completed_ids.add(str(item["STT"]))
+            except Exception as e:
+                print(f"⚠️ Lỗi đọc file JSON output hiện tại: {e}")
+
+        # 4. Phân loại Task
+        for idx, time_range, text in matches:
+            idx = str(idx).strip()
+            text = text.strip().replace('\n', ' ')
+            
+            task_item = {
+                "STT": idx,           
+                "text": text,
+                "time_range": time_range,
+                "json_path": json_output_path,
+                "shuffle_gems": shuffle_gems # Đưa danh sách gem vào để worker biết lấy ngẫu nhiên
+            }
+
+            if idx in completed_ids:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+
+    except Exception as e:
+        print(f"❌ Lỗi xử lý SRT Shuffle: {e}")
+        
+    return pending, completed

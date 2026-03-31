@@ -1,7 +1,7 @@
 import os
 from engine.browser import init_driver_from_profile
 import time
-from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt, handle_prompt_to_image, handle_2_image_to_prompt, handle_srt_to_image, handle_srt_multilanguage
+from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt, handle_prompt_to_image, handle_2_image_to_prompt, handle_srt_to_image, handle_srt_multilanguage, handle_srt_shuffle
 def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, profiles_dir, stop_event, log_callback):
     """
     Worker đa năng: Chỉ lo việc quản lý vòng đời (Lifecycle) của Driver.
@@ -52,7 +52,9 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
 
         elif task_type == "srt_multilanguage":
             is_healthy, failed_items = handle_srt_multilanguage(driver, batch, assets_path, prompt, url, task_log)
-
+        
+        elif task_type == "srt_shuffle":
+            is_healthy, failed_items = handle_srt_shuffle(driver, batch, assets_path, prompt, url, task_log)
         else:
             task_log(f"❌ Loại task '{task_type}' chưa được hỗ trợ!", "ERROR")
             return True, failed_items # Trả về nhưng không đánh dấu hỏng profile

@@ -16,6 +16,8 @@ class DashboardTab(ttk.Frame):
         
         # Biến lưu trữ checkbox ngôn ngữ
         self.lang_vars = {}
+        # Biến lưu trữ checkbox Gem cho chế độ Shuffle
+        self.gem_vars = {}
         # Lấy settings từ config global
         self.settings = global_settings
         self.lang_objects = self.settings.get("standardize", {}).get("languages", [])
@@ -50,13 +52,14 @@ class DashboardTab(ttk.Frame):
             "Prompt ➡ Image", 
             "2_Image ➡ Prompt", 
             "SRT ➡ Image",
-            "SRT ➡ Multilanguage"
+            "SRT ➡ Multilanguage",
+            "SRT ➡ Shuffle"
         )
         self.cbo_mode.pack(side="left", padx=5)
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
 
         # Khối chọn ngôn ngữ (Mặc định ẩn)
-        self.frame_langs = ttk.LabelFrame(self, text="🌐 Chọn ngôn ngữ chuẩn hóa (API)", padding=10)
+        self.frame_langs = ttk.LabelFrame(self, text="🌐 Chọn ngôn ngữ chuẩn hóa", padding=10)
         
         cb_container = ttk.Frame(self.frame_langs)
         cb_container.pack(fill="x")
@@ -65,6 +68,19 @@ class DashboardTab(ttk.Frame):
             var = tk.BooleanVar(value=False)
             self.lang_vars[lang["code"]] = var
             cb = ttk.Checkbutton(cb_container, text=lang["name"], variable=var)
+            cb.grid(row=i // 5, column=i % 5, sticky="w", padx=15, pady=2)
+
+
+        # Khối chọn GEM cho Shuffle (Mặc định ẩn)
+        self.frame_shuffle = ttk.LabelFrame(self, text="🔀 Chọn các GEM để Shuffle", padding=10)
+        cb_shuffle_container = ttk.Frame(self.frame_shuffle)
+        cb_shuffle_container.pack(fill="x")
+        
+        # Duyệt qua danh sách gems lấy từ settings
+        for i, gem in enumerate(self.gems_data):
+            var = tk.BooleanVar(value=False)
+            self.gem_vars[gem["name"]] = var
+            cb = ttk.Checkbutton(cb_shuffle_container, text=gem["name"], variable=var)
             cb.grid(row=i // 5, column=i % 5, sticky="w", padx=15, pady=2)
 
         # Nút chạy đặt ở frame_ctrl
@@ -158,19 +174,23 @@ class DashboardTab(ttk.Frame):
 
     # --- LOGIC ẨN/HIỆN ---
     def _on_mode_change(self, event):
-        """Kiểm tra mode để hiện/ẩn checkbox ngôn ngữ"""
-        if self.selected_mode.get() == "SRT ➡ Multilanguage":
-            # Hiện khung ngôn ngữ ngay dưới frame_ctrl
+        """Kiểm tra mode để hiện/ẩn checkbox ngôn ngữ hoặc shuffle gems"""
+        mode = self.selected_mode.get()
+        
+        # Ẩn cả 2 khung trước
+        self.frame_langs.pack_forget()
+        self.frame_shuffle.pack_forget()
+        
+        if mode == "SRT ➡ Multilanguage":
             self.frame_langs.pack(fill="x", padx=10, pady=5, after=self.frame_ctrl)
-        else:
-            # Ẩn khung ngôn ngữ
-            self.frame_langs.pack_forget()
+        elif mode == "SRT ➡ Shuffle":
+            self.frame_shuffle.pack(fill="x", padx=10, pady=5, after=self.frame_ctrl)
 
     # --- INPUT HANDLERS & PROJECT QUEUE ---
     def _pick_input(self):
         mode = self.selected_mode.get()
-        # Chấp nhận file cho các mode liên quan đến SRT hoặc Prompt đơn lẻ
-        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage"]
+        # MỚI: Thêm "SRT ➡ Shuffle" vào danh sách file_modes
+        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle"]
         
         if mode in file_modes:
             if "SRT" in mode:
@@ -205,6 +225,15 @@ class DashboardTab(ttk.Frame):
             if not selected_langs:
                 messagebox.showwarning("Thiếu ngôn ngữ", "Vui lòng chọn ít nhất 1 ngôn ngữ để chuẩn hóa!")
                 return
+        # Nếu là mode Shuffle, lấy danh sách các GEM được chọn
+        selected_shuffle_gems = []
+        if mode == "SRT ➡ Shuffle":
+            # Lấy toàn bộ object gem nếu tick chọn (để dễ lấy URL sau này), hoặc chỉ lấy tên tuỳ bạn
+            # Ở đây tôi lưu lại list các dictionary của Gem đã được tick
+            selected_shuffle_gems = [gem for gem in self.gems_data if self.gem_vars[gem["name"]].get()]
+            if not selected_shuffle_gems:
+                messagebox.showwarning("Thiếu thông tin", "Vui lòng chọn ít nhất 1 GEM để Shuffle!")
+                return
 
         task_item = {
             "input": inp,
@@ -213,6 +242,7 @@ class DashboardTab(ttk.Frame):
             "gem_name": gem_name,
             "prompt": prompt_val,
             "languages": selected_langs, # Lưu danh sách ngôn ngữ vào task
+            "shuffle_gems": selected_shuffle_gems, # Lưu danh sách Gem đã chọn vào task
             "status": "Waiting"
         }
         

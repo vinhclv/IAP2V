@@ -7,10 +7,11 @@ from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
 from engine.tasks.srt_to_image import process_srt_item_to_image
 from engine.tasks.srt_to_multilanguage import process_srt_multilanguage
+from engine.tasks.srt_to_shuffle import process_srt_shuffle
 import time
 import re
 import config
-
+from urllib.parse import urlparse
 def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý danh sách ảnh để tạo prompt.
@@ -537,6 +538,83 @@ def handle_srt_multilanguage(driver, batch, assets_path, prefix_prompt, url, log
 
     # 4. Kiểm tra tổng kết Profile
     if len(failed_list) == len(batch):
+        return False, failed_list
+
+    return True, failed_list
+
+def handle_srt_shuffle(driver, batch, assets_path, prompt, url, log_callback):
+    """
+    Xử lý gửi dữ liệu để xáo trộn (shuffle) SRT.
+    """
+    
+    try:
+        if "gemini.google.com" not in driver.current_url:
+            driver.get(url)
+            time.sleep(5)
+    except Exception as e:
+        log_callback(f"❌ Error opening Gemini page: {e}")
+        return False, batch
+
+    # Kiểm tra trạng thái đăng xuất
+    if "accounts.google.com" in driver.current_url:
+        log_callback("❌ Profile đã bị đăng xuất -> Dừng xử lý.")
+        return False, batch
+
+    failed_list = list(batch)
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 3  
+
+    # 3. Lấy cấu hình Chunk Size
+    try:
+        CHUNK_SIZE = config.global_settings["system"]["loop_limitt"]
+    except Exception:
+        CHUNK_SIZE = 10
+
+    # Chia batch thành các chunk
+    chunks = [batch[i:i + CHUNK_SIZE] for i in range(0, len(batch), CHUNK_SIZE)]
+
+    # 4. Duyệt qua từng Chunk
+    for chunk in chunks:
+        chunk_ids = [item.get('STT', 'Unknown') for item in chunk]
+        
+        while True:
+            try:
+                # Gọi hàm xử lý UI thực tế (truyền thêm prompt)
+                success = process_srt_shuffle(driver, chunk, prompt, log_callback)
+
+                if success:
+                    log_callback(f"✅ Xong Shuffle STT: {chunk_ids[0]} - {chunk_ids[-1]}")
+                    
+                    for item in chunk:
+                        if item in failed_list: 
+                            failed_list.remove(item)
+                    
+                    consecutive_errors = 0 
+                    break 
+                
+                else:
+                    consecutive_errors += 1
+                    log_callback(f"⚠️ Lỗi xử lý Shuffle chunk {chunk_ids[0]}-{chunk_ids[-1]} (Lần {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
+                    
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                        log_callback("💀 AI lỗi liên tiếp -> Đánh dấu Profile hỏng.")
+                        return False, failed_list
+                    
+                    log_callback("♻️ Refresh trang và thử lại chunk cũ...")
+                    driver.refresh()
+                    time.sleep(5)
+
+            except Exception as e:
+                log_callback(f"❌ Exception nghiêm trọng: {e}")
+                consecutive_errors += 1
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    return False, failed_list
+                driver.refresh()
+                time.sleep(5)
+
+    # 5. Kiểm tra tổng kết
+    if len(failed_list) == len(batch):
+        log_callback(f"❌ Thất bại toàn tập (0/{len(batch)}) -> Profile hỏng.")
         return False, failed_list
 
     return True, failed_list

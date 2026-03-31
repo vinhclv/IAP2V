@@ -22,9 +22,19 @@
             "description": ""
         },
         {
-            "name": "srt->image",
+            "name": "G1_IMAGE",
             "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing",
-            "description": ""
+            "description": "Tạo ảnh theo phong cách anime"
+        },
+        {
+            "name": "G2_IMAGE",
+            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing",
+            "description": "Tạo ảnh theo phong cách Lãng mạn"
+        },
+        {
+            "name": "G3_IMAGE",
+            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing",
+            "description": "Tạo ảnh theo phong cách Kinh dị"
         },
         {
             "name": "image->prompt",

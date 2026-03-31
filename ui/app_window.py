@@ -95,7 +95,8 @@ class BatchApp:
             "Prompt ➡ Image": "prompt_image",
             "2_Image ➡ Prompt": "2_image_prompt",
             "SRT ➡ Image": "srt_image",
-            "SRT ➡ Multilanguage": "srt_multilanguage"
+            "SRT ➡ Multilanguage": "srt_multilanguage",
+            "SRT ➡ Shuffle": "srt_shuffle"
         }
         loop_type = mode_map.get(mode_text, "image_prompt")
 
