@@ -88,17 +88,23 @@ class SettingsTab(ttk.Frame):
         self.entry_url.pack(side="left", fill="x", expand=True, padx=5)
         self._set_placeholder(self.entry_url, "URL...")
 
+        self.entry_description = ttk.Entry(input_row)
+        self.entry_description.pack(side="left", fill="x", expand=True, padx=5)
+        self._set_placeholder(self.entry_description, "Mô tả...")
+
         ttk.Button(input_row, text="➕ Thêm", command=self.add_gem).pack(side="left", padx=5)
 
         # B. Treeview
         tree_container = ttk.Frame(gem_frame)
         tree_container.pack(fill="both", expand=True)
 
-        self.gem_tree = ttk.Treeview(tree_container, columns=("name", "url"), show="headings", selectmode="browse")
+        self.gem_tree = ttk.Treeview(tree_container, columns=("name", "url", "description"), show="headings", selectmode="browse")
         self.gem_tree.heading("name", text="Tên Gem")
         self.gem_tree.heading("url", text="URL")
+        self.gem_tree.heading("description", text="Mô tả")
         self.gem_tree.column("name", width=150, minwidth=100, stretch=False)
         self.gem_tree.column("url", width=300, minwidth=200, stretch=True)
+        self.gem_tree.column("description", width=300, minwidth=200, stretch=True)
 
         sb_y = ttk.Scrollbar(tree_container, orient="vertical", command=self.gem_tree.yview)
         self.gem_tree.configure(yscrollcommand=sb_y.set)
@@ -213,18 +219,19 @@ class SettingsTab(ttk.Frame):
     def _load_gems_to_tree(self):
         for i in self.gem_tree.get_children(): self.gem_tree.delete(i)
         for g in config.global_settings.get("gems", []): 
-            self.gem_tree.insert("", "end", values=(g["name"], g["url"]))
+            self.gem_tree.insert("", "end", values=(g["name"], g["url"], g["description"]))
 
     def add_gem(self):
-        n, u = self.entry_name.get().strip(), self.entry_url.get().strip()
+        n, u, d = self.entry_name.get().strip(), self.entry_url.get().strip(), self.entry_description.get().strip()
         if not n or not u or n == "Tên Gem..." or u == "URL...": return
         
-        config.global_settings["gems"].append({"name": n, "url": u})
+        config.global_settings["gems"].append({"name": n, "url": u, "description": d})
         config.save_config() # Lưu ngay
         
         self._load_gems_to_tree()
         self.entry_name.delete(0, tk.END); self._focus_out(self.entry_name, "Tên Gem...")
         self.entry_url.delete(0, tk.END); self._focus_out(self.entry_url, "URL...")
+        self.entry_description.delete(0, tk.END); self._focus_out(self.entry_description, "Mô tả...")
 
     def delete_gem(self):
         sel = self.gem_tree.selection()

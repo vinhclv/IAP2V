@@ -18,23 +18,23 @@
     "gems": [
         {
             "name": "srt->prompt",
-            "url": "https://gemini.google.com/gem/4828ed7257c0/7862ad4019837d08?usp=sharing"
+            "url": "https://gemini.google.com/gem/4828ed7257c0/7862ad4019837d08?usp=sharing",
+            "description": ""
         },
         {
             "name": "srt->image",
-            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing"
+            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing",
+            "description": ""
         },
         {
             "name": "image->prompt",
-            "url": "https://gemini.google.com/gem/1eGtVu5CR6oCr6OM3Ynf_RCQjvYOHtoEz?usp=sharing"
+            "url": "https://gemini.google.com/gem/1eGtVu5CR6oCr6OM3Ynf_RCQjvYOHtoEz?usp=sharing",
+            "description": ""
         },
         {
             "name": "srt->mul",
-            "url": "https://gemini.google.com"
-        },
-        {
-            "name": "tes",
-            "url": "tttt"
+            "url": "https://gemini.google.com",
+            "description": ""
         }
     ],
     "standardize": {
