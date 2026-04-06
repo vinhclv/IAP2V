@@ -618,3 +618,82 @@ def handle_srt_shuffle(driver, batch, assets_path, prompt, url, log_callback):
         return False, failed_list
 
     return True, failed_list
+
+def handle_shuffle_image(driver, batch, assets_path, prompt, default_url, log_callback):
+    """
+    Xử lý tạo ảnh từ Prompt đã xáo trộn (Shuffle ➡ Image).
+    Mỗi item trong batch có thể có một URL (GEM) khác nhau.
+    """
+    failed_list = list(batch)
+    consecutive_errors = 0
+    MAX_CONSECUTIVE_ERRORS = 3 
+
+    # Lặp qua từng Task (Từng yêu cầu tạo 1 ảnh từ 1 Prompt)
+    for task_item in batch:
+
+        output_folder = task_item.get('output_folder', '')
+        
+        # Dùng .get() linh hoạt đề phòng trường hợp key là 'id' hoặc 'STT'
+        idx = task_item.get('id')
+        
+        # [QUAN TRỌNG] Lấy URL cụ thể của riêng Task này
+        target_url = task_item.get('gem_url') or default_url
+        gem_name = task_item.get('gem_name', 'Default GEM')
+
+        log_callback(f"▶️ Bắt đầu xử lý STT {idx} | GEM: {gem_name}")
+
+        # --- 1. ĐIỀU HƯỚNG THEO TỪNG TASK ---
+        try:
+            if "gemini.google.com" not in driver.current_url:
+                driver.get(target_url)
+                time.sleep(5)
+        except Exception as e:
+            log_callback(f"❌ Lỗi mở trang: {e}")
+            return False, batch
+
+        # --- 2. TẠO THƯ MỤC ---
+        try:
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+        except Exception as e:
+            log_callback(f"❌ Lỗi tạo thư mục {output_folder}: {e}")
+            continue
+
+        # --- 3. VÒNG LẶP RETRY CHO 1 TASK ---
+        task_retry = 0
+        task_ok = False
+        
+        while task_retry < MAX_CONSECUTIVE_ERRORS:
+            # Gọi hàm core xử lý UI (Lưu ý: Bạn có thể cần truyền thêm tham số prompt cấu hình chung nếu muốn)
+            success = process_prompt_to_image(driver, task_item,log_callback)
+
+            if success:
+                consecutive_errors = 0
+                task_ok = True
+                break # Thoát vòng lặp retry, qua STT tiếp theo
+            else:
+                task_retry += 1
+                consecutive_errors += 1
+                log_callback(f"⚠️ Lỗi tạo ảnh {idx} (Lần {task_retry}/{MAX_CONSECUTIVE_ERRORS})")
+                
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    log_callback("💀 Lỗi liên tục quá nhiều lần -> Dừng.")
+                    return False, failed_list
+                
+                log_callback("♻️ Refresh lại trang để thử lại...")
+                driver.refresh()
+                time.sleep(5)
+        
+        # --- 4. KẾT LUẬN CHO TASK NÀY ---
+        if task_ok:
+            log_callback(f"🎉 Hoàn thành tạo ảnh: {idx}.jpg")
+            if task_item in failed_list: 
+                failed_list.remove(task_item)
+        else:
+            log_callback(f"❌ Thất bại hoàn toàn khi tạo ảnh {idx}.")
+
+    # Kiểm tra tổng kết Profile
+    if len(failed_list) == len(batch):
+        return False, failed_list
+
+    return True, failed_list

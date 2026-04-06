@@ -199,7 +199,7 @@ def process_srt_item_to_image(driver, item, log_callback=print):
             btn_model_menu = wait.until(EC.presence_of_element_located((By.XPATH, xpath_model_menu)))
             driver.execute_script("arguments[0].click();", btn_model_menu)
             time.sleep(1.5)
-            xpath_pro = "/html/body/div[8]/div/div/div/div/div/button[3]"
+            xpath_pro = "//div[@role='menu']//button[.//span[contains(text(), 'Advanced') or contains(text(), 'Pro')]]"
             btn_pro = wait.until(EC.presence_of_element_located((By.XPATH, xpath_pro)))
             driver.execute_script("arguments[0].click();", btn_pro)
             time.sleep(2)

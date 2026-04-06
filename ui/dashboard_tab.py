@@ -18,16 +18,12 @@ class DashboardTab(ttk.Frame):
         
         self.settings = global_settings
         self.lang_objects = self.settings.get("standardize", {}).get("languages", [])
-        self.gems_data = self._load_gems_from_settings()
+        self.gems_data = self.settings.get("gems", [])
         
         # Gọi hàm setup giao diện đã được chia nhỏ
         self._setup_ui()
         self._load_defaults() 
         self._on_mode_change(None)
-
-    def _load_gems_from_settings(self):
-        """Lấy danh sách Gem siêu tốc từ RAM"""
-        return global_settings.get("gems", [])
 
     # ==========================================
     # PHẦN 1: QUẢN LÝ VẼ GIAO DIỆN (UI BUILDERS)
@@ -52,7 +48,7 @@ class DashboardTab(ttk.Frame):
         self.cbo_mode['values'] = (
             "Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", 
             "Prompt ➡ Image", "2_Image ➡ Prompt", "SRT ➡ Image",
-            "SRT ➡ Multilanguage", "SRT ➡ Shuffle"
+            "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image"
         )
         self.cbo_mode.pack(side="left", padx=5)
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
@@ -77,14 +73,26 @@ class DashboardTab(ttk.Frame):
 
         # Form Shuffle
         self.frame_shuffle = ttk.LabelFrame(self, text="🔀 Chọn các GEM để Shuffle", padding=10)
-        cb_shuffle_container = ttk.Frame(self.frame_shuffle)
-        cb_shuffle_container.pack(fill="x")
+        self.cb_shuffle_container = ttk.Frame(self.frame_shuffle)
+        self.cb_shuffle_container.pack(fill="x")
+        self._render_shuffle_checkboxes()
+
+    def _render_shuffle_checkboxes(self):
+        """Xóa và vẽ lại toàn bộ checkbox trong Form Shuffle"""
+        # 1. Xóa các widget cũ đang có trong container
+        for widget in self.cb_shuffle_container.winfo_children():
+            widget.destroy()
+        
+        # 2. Reset lại dictionary chứa các biến BooleanVar
+        self.gem_vars = {}
+        
+        # 3. Vẽ lại các checkbox mới
         for i, gem in enumerate(self.gems_data):
             var = tk.BooleanVar(value=False)
             self.gem_vars[gem["name"]] = var
-            cb = ttk.Checkbutton(cb_shuffle_container, text=gem["name"], variable=var)
+            cb = ttk.Checkbutton(self.cb_shuffle_container, text=gem["name"], variable=var)
             cb.grid(row=i // 5, column=i % 5, sticky="w", padx=15, pady=2)
-
+            
     def _build_add_project_form(self):
         """Khối 3: Thêm Input/Output/GEM"""
         frame_add = ttk.LabelFrame(self, text="➕ Thêm Dự án", padding=10)
@@ -184,10 +192,13 @@ class DashboardTab(ttk.Frame):
 
     def _pick_input(self):
         mode = self.selected_mode.get()
-        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle"]
+        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image"]
         
         if mode in file_modes:
-            f = filedialog.askopenfilename(title="Chọn file", filetypes=[("SRT Files", "*.srt")] if "SRT" in mode else [("JSON/TXT", "*.json *.txt")])
+            if "SRT" in mode:
+                f = filedialog.askopenfilename(title="Chọn file SRT", filetypes=[("SRT Files", "*.srt")])
+            else:
+                f = filedialog.askopenfilename(title="Chọn file JSON", filetypes=[("JSON", "*.json")])
         else:
             f = filedialog.askdirectory(title="Chọn thư mục Input")
             
@@ -270,13 +281,17 @@ class DashboardTab(ttk.Frame):
         pass
 
     def refresh_gem_list(self):
-        self.gems_data = self._load_gems_from_settings()
+        self.gems_data = self.settings.get("gems", [])
         gem_names = [g["name"] for g in self.gems_data]
         if hasattr(self, 'cbo_gem_url'):
             current = self.cbo_gem_url.get()
             self.cbo_gem_url['values'] = gem_names
             if gem_names and (not current or current not in gem_names):
                 self.cbo_gem_url.current(0)
+        
+        # Cập nhật lại các checkbox Shuffle
+        if hasattr(self, 'cb_shuffle_container'):
+            self._render_shuffle_checkboxes()
 
     def update_project_status(self, index, status):
         if 0 <= index < len(self.project_queue):

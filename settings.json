@@ -3,7 +3,7 @@
         "max_threads": 3,
         "loop_limit": 2,
         "max_retries": 10,
-        "wait_time": 50
+        "wait_time": 100
     },
     "urls": {
         "gemini_url": "https://gemini.google.com",
@@ -45,6 +45,11 @@
             "name": "srt->mul",
             "url": "https://gemini.google.com",
             "description": ""
+        },
+        {
+            "name": "selfhelp",
+            "url": "https://gemini.google.com/gem/1X1o_5olm-UVXMoPrIPDDzlFGdMuIilGw?usp=sharing",
+            "description": "Mô tả..."
         }
     ],
     "standardize": {

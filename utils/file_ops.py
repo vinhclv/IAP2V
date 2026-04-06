@@ -394,3 +394,64 @@ def get_srt_shuffle_status(srt_path, output_dir, shuffle_gems):
         print(f"❌ Lỗi xử lý SRT Shuffle: {e}")
         
     return pending, completed
+
+def get_shuffle_image_status(json_path, output_dir):
+    """
+    Đọc file input .json (chứa Prompt).
+    Kiểm tra xem file ảnh tương ứng (STT.jpg) đã tồn tại trong thư mục output chưa.
+    """
+    pending = []
+    completed = []
+    
+    if not os.path.exists(json_path):
+        return [], []
+
+    try:
+        # 1. Đọc nội dung JSON Input
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # 2. Duyệt qua từng item
+        for item in data:
+            # Lấy STT và Prompt (ép kiểu str để an toàn)
+            idx = str(item.get("STT", "")).strip()
+            prompt_text = item.get("text", "").strip()
+
+            if not idx: 
+                continue # Bỏ qua nếu data lỗi không có STT
+
+            # Đường dẫn file ảnh mong đợi (SỬA LỖI: dùng đúng output_dir)
+            image_filename = f"{idx}.jpg"
+            image_path = os.path.join(output_dir, image_filename)
+            
+            # --- SỬA LỖI LẤY THÔNG TIN GEM AN TOÀN ---
+            gem_info = item.get("GEM", {}) # Lấy ra dict, nếu không có thì trả về dict rỗng {}
+            gem_url = ""
+            gem_name = ""
+            
+            # Đảm bảo gem_info thực sự là một dictionary trước khi gọi .get()
+            if isinstance(gem_info, dict):
+                gem_url = gem_info.get("url", "").strip()
+                gem_name = gem_info.get("name", "").strip()
+
+            # 3. Tạo object task
+            task_item = {
+                "id": idx,
+                "prompt": prompt_text,
+                "save_path": image_path, # Đường dẫn lưu ảnh để Worker dùng
+                "output_folder": output_dir, # SỬA LỖI: dùng đúng output_dir
+                "type": "shuffle_image", # SỬA LỖI: gõ đúng chính tả
+                "gem_url": gem_url,
+                "gem_name": gem_name
+            }
+
+            # 4. Kiểm tra file ảnh có tồn tại và có dung lượng > 0
+            if os.path.exists(image_path) and os.path.getsize(image_path) > 0:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+
+    except Exception as e:
+        print(f"❌ Lỗi đọc JSON Prompt Image: {e}")
+        
+    return pending, completed

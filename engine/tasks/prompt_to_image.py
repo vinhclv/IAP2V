@@ -184,13 +184,12 @@ def process_prompt_to_image(driver, item, log_callback=print):
         old_count = len(old_images)
 
         # --- 1.1. CHỌN MODEL PRO (Giữ nguyên logic của bạn) ---
-        # Lưu ý: Nên đưa phần này ra ngoài loop ở handler.py như đã thảo luận
         try:
             xpath_model_menu = "//bard-mode-switcher//button"
             btn_model_menu = wait.until(EC.presence_of_element_located((By.XPATH, xpath_model_menu)))
             driver.execute_script("arguments[0].click();", btn_model_menu)
             time.sleep(1.5)
-            xpath_pro = "/html/body/div[8]/div/div/div/div/div/button[3]"
+            xpath_pro = "//div[@role='menu']//button[.//span[contains(text(), 'Advanced') or contains(text(), 'Pro')]]"
             btn_pro = wait.until(EC.presence_of_element_located((By.XPATH, xpath_pro)))
             driver.execute_script("arguments[0].click();", btn_pro)
             time.sleep(2)
@@ -203,7 +202,7 @@ def process_prompt_to_image(driver, item, log_callback=print):
         input_box.send_keys(" ") 
         time.sleep(1)
         
-        send_button = driver.find_element(By.XPATH, "//button[contains(@aria-label, 'Send') or .//mat-icon[text()='send']]")
+        send_button = driver.find_element(By.XPATH, "//button[contains(@class, 'send-button')]")
         driver.execute_script("arguments[0].click();", send_button)
 
         # --- 3. ĐỢI ẢNH MỚI ---

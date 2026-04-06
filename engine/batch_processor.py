@@ -6,7 +6,7 @@ import os
 import concurrent.futures
 
 from config import DEFAULT_PROFILES
-from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status, get_srt_image_status, get_srt_multilanguage_status, get_srt_shuffle_status
+from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status, get_srt_image_status, get_srt_multilanguage_status, get_srt_shuffle_status, get_shuffle_image_status
 from engine.worker import run_worker_task
 import config
 class BatchProcessor:
@@ -76,6 +76,8 @@ class BatchProcessor:
                     pending, _ = get_srt_multilanguage_status(inp, out, languages)
                 case "srt_shuffle":
                     pending, _ = get_srt_shuffle_status(inp, out, shuffle_gems)
+                case "shuffle_image":
+                    pending, _ = get_shuffle_image_status(inp, out)
                 case _:
                     pending, _ = get_prompt_video_status(out)
 
@@ -146,6 +148,9 @@ class BatchProcessor:
                     case "srt_shuffle":
                         actual_pending, _ = get_srt_shuffle_status(inp_path, out_path, shuffle_gems)
                         batch = actual_pending
+                    case "shuffle_image":
+                        actual_pending, _ = get_shuffle_image_status(inp_path, out_path)
+                        batch = [item for item in candidates if item in actual_pending]
                     case _: # prompt_video 
                         actual_pending, _ = get_prompt_video_status(out_path)
                         batch = [item for item in candidates if item in actual_pending]
@@ -186,6 +191,8 @@ class BatchProcessor:
                             pending, completed = get_srt_multilanguage_status(inp, out, languages)
                         case "srt_shuffle":
                             pending, completed = get_srt_shuffle_status(inp, out, shuffle_gems)
+                        case "shuffle_image":
+                            pending, completed = get_shuffle_image_status(inp, out)
                         case _: # prompt_video
                             pending, completed = get_prompt_video_status(out)
 
