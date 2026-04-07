@@ -31,7 +31,7 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
 
         prefix_instruction = (
             "COMMAND: You must output the result strictly inside a Markdown code block (```json ... ```).\n"
-            "Include STT and all visual details. Do not include any text outside the code block."
+            "Include KEY: STT and all visual details. Do not include any text outside the code block."
         )
 
         user_prompt = f"{prefix_instruction}\n\nList:\n{srt_content_block}"
@@ -41,11 +41,16 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
             input_box = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true']")))
             input_box.clear()
             driver.execute_script("arguments[0].textContent = arguments[1];", input_box, user_prompt)
+            
+            # Gõ một dấu cách để kích hoạt nút Send của Angular/React
             input_box.send_keys(" ") 
             time.sleep(1)
-            send_button = driver.find_element(By.XPATH, "//button[contains(@aria-label, 'Send') or .//mat-icon[text()='send']]")
+            
+            send_button = driver.find_element(By.XPATH, "//button[contains(@class, 'send-button')]")
             driver.execute_script("arguments[0].click();", send_button)
-        except: return False
+        except Exception as e:
+            log_callback(f"❌ Lỗi khi gửi tin nhắn: {e}")
+            return False
 
         # --- 3. ĐỢI PHẢN HỒI XONG ---
         log_callback("⏳ Đang đợi Gemini trả lời...")

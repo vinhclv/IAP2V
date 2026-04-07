@@ -1,6 +1,6 @@
 {
     "system": {
-        "max_threads": 3,
+        "max_threads": 4,
         "loop_limit": 2,
         "max_retries": 10,
         "wait_time": 100
@@ -27,16 +27,6 @@
             "description": "Tạo ảnh theo phong cách anime"
         },
         {
-            "name": "G2_IMAGE",
-            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing",
-            "description": "Tạo ảnh theo phong cách Lãng mạn"
-        },
-        {
-            "name": "G3_IMAGE",
-            "url": "https://gemini.google.com/gem/1HEOSobBlKC94MVGM_TVAh5Tf36VX2j6P?usp=sharing",
-            "description": "Tạo ảnh theo phong cách Kinh dị"
-        },
-        {
             "name": "image->prompt",
             "url": "https://gemini.google.com/gem/1eGtVu5CR6oCr6OM3Ynf_RCQjvYOHtoEz?usp=sharing",
             "description": ""
@@ -47,9 +37,19 @@
             "description": ""
         },
         {
-            "name": "selfhelp",
+            "name": "SH_1",
+            "url": "https://gemini.google.com/gem/11gyGR3IPkzchZlB9Xntwr1eA2mW3cCup?usp=sharing",
+            "description": "The output of this GEM consists of images in the Minimalist Art style. Material & Strokes: Charcoal & Pencil Sketch: Strokes are handcrafted, rustic, and preserve the characteristic grainy, dusty texture of graphite. Color & Space: Grayscale on Bright Canvas: The entire image uses the black and white tones of graphite, placed on a bright white, airy paper background. Overall feeling (Vibe): at its core, uses only two colors, black and white."
+        },
+        {
+            "name": "SH_2",
             "url": "https://gemini.google.com/gem/1X1o_5olm-UVXMoPrIPDDzlFGdMuIilGw?usp=sharing",
-            "description": "Mô tả..."
+            "description": "The output of this GEM consists of images in the Minimalist Art style. Material & Brushstrokes: Pencil & Charcoal Sketch: Strokes are handcrafted, rustic, and have the rough texture of graphite charcoal. Color & Space: Primary color palette: Use Neutral & Warm Earthy tones (#F2D2C2, #C6A894, #6D6E71) instead of pure white for the background. Emotional customization color system: Dramatic (Strong): High contrast, deep shadows, sharp shading, accented with diffused golden light (Golden Highlights - 2700K), Contemplative (Soft): Low contrast, atmospheric shadowing, diffused light, using Mellow Greens tones, Transition: Ivory & Light Beige negative space, replacing characters with artistic handwriting Typography or abstract patterns. Overall feeling (Vibe) Atmospheric & Healing: Bringing a sense of contemplation, safety, and deep motivation."
+        },
+        {
+            "name": "SH_3",
+            "url": "https://gemini.google.com/gem/14wKFBKqU5C2T8Omoi0EGB8cSfOBhW_i4?usp=sharing",
+            "description": "The output of this GEM consists of images in the Minimalist Sketchbook Doodle style:\n\nMaterial & Brushstrokes: Looks like hand-drawn doodles using ballpoint pen or thin felt-tip pen on rough sketchbook paper or faded lined paper. The strokes intentionally retain a slight shake, appearing somewhat scribbled and handcrafted.\n\nColor & Space: * When the quote is strong/decisive: Bold, decisive ink strokes combined with warm golden light (Golden Highlights) as accents.\n\nWhen the quote is gentle/contemplative: Slender strokes, plenty of empty space (negative space) on paper with soothing tones (light moss green, warm earthy colors, ivory).\n\nWhen it is a transition sentence (no character): The scene transforms into notebook margin doodles (spirals, leaves, wavy lines) or artistic rustic handwriting.\n\nOverall feeling (Vibe): Minimalist, intimate, safe, and deeply personal—like you are flipping through the diary of someone who always carries positive energy."
         }
     ],
     "standardize": {
