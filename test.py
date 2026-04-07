@@ -44,7 +44,7 @@ def merge_video_audio(video_path, audio_path, output_path):
 # ==========================================
 if __name__ == "__main__":
     # Thay đổi đường dẫn tới file thực tế của bạn
-    file_mp4_goc = r"\\Synology-new\data share\Dat\selfhelp\sf_1\Image_Final.mp4"
+    file_mp4_goc = r"\\Synology-new\data share\Dat\selfhelp\FINAL_TEST\Image_Final_1.mp4"
     file_mp3_goc = r"\\Synology-new\data share\Dat\selfhelp\test.mp3"
-    file_dau_ra = r"\\Synology-new\data share\Dat\selfhelp\sf_1\video_da_ghep.mp4"
+    file_dau_ra = r"\\Synology-new\data share\Dat\selfhelp\FINAL_TEST\video_da_ghep.mp4"
     merge_video_audio(file_mp4_goc, file_mp3_goc, file_dau_ra)

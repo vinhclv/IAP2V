@@ -71,6 +71,19 @@ COMMAND: You must output the result strictly inside a Markdown code block (```js
         # 1.4 Gộp thành User Prompt hoàn chỉnh
         user_prompt = f"{prefix_instruction}\n\nĐoạn SRT cần xử lý:\n{srt_content_block}"
 
+
+        # CHỌN MODEL PRO
+        try:
+            xpath_model_menu = "//bard-mode-switcher//button"
+            btn_model_menu = wait.until(EC.presence_of_element_located((By.XPATH, xpath_model_menu)))
+            driver.execute_script("arguments[0].click();", btn_model_menu)
+            time.sleep(1.5)
+            xpath_pro = "//div[@role='menu']//button[.//span[contains(text(), 'Advanced') or contains(text(), 'Pro')]]"
+            btn_pro = wait.until(EC.presence_of_element_located((By.XPATH, xpath_pro)))
+            driver.execute_script("arguments[0].click();", btn_pro)
+            time.sleep(2)
+        except: pass
+        
         # --- 2. GỬI TIN NHẮN ---
         try:
             input_box = wait.until(EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true']")))
