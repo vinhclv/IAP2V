@@ -1,7 +1,10 @@
 import os
 from engine.browser import init_driver_from_profile
+from engine.browser_playright import init_driver_from_profile_playwright
 import time
-from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video, handle_srt_to_prompt, handle_prompt_to_image, handle_2_image_to_prompt, handle_srt_to_image, handle_srt_multilanguage, handle_srt_shuffle, handle_shuffle_image
+from engine.tasks.handler import handle_image_to_prompt, handle_prompt_to_video_async, handle_srt_to_prompt, handle_prompt_to_image, handle_2_image_to_prompt, handle_srt_to_image, handle_srt_multilanguage, handle_srt_shuffle, handle_shuffle_image
+import asyncio
+
 def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, profiles_dir, stop_event, log_callback):
     """
     Worker đa năng: Chỉ lo việc quản lý vòng đời (Lifecycle) của Driver.
@@ -12,18 +15,21 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
     def task_log(msg, level="INFO"):
         log_callback(f"[{profile_folder}] {msg}", level)
 
-    # 1. Khởi tạo Driver
     task_log(f"🚀 Khởi động (Task: {task_type})...")
+
+    # --- NẾU LÀ PLAYWRIGHT: ĐẨY SANG CẦU NỐI VÀ RETURN LUÔN ---
+    if task_type == "prompt_video":
+        is_healthy, failed_items = run_playwright_batch_sync(
+            p_path, batch, assets_path, prompt, url, task_log
+        )
+        task_log("Đóng trình duyệt Playwright.", "INFO")
+        return is_healthy, failed_items
+
+
+    # --- NẾU LÀ SELENIUM: GIỮ NGUYÊN LOGIC CŨ ---
     driver = init_driver_from_profile(p_path, log_callback=lambda m: task_log(m))
-    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-    "source": """
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        })
-    """
-    })
     if not driver:
-        return False, list(batch) # Fail ngay từ đầu
+        return False, list(batch) 
 
     failed_items = list(batch)
     is_healthy = True
@@ -34,9 +40,6 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
         
         if task_type == "image_prompt":
             is_healthy, failed_items = handle_image_to_prompt(driver, batch, assets_path, prompt, url, task_log)
-            
-        elif task_type == "prompt_video":
-            is_healthy, failed_items = handle_prompt_to_video(driver, batch, assets_path, prompt, url, task_log)
             
         elif task_type == "srt_prompt": 
             is_healthy, failed_items = handle_srt_to_prompt(driver, batch, assets_path, prompt, url, task_log)
@@ -73,3 +76,46 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
         task_log("Đóng trình duyệt.", "INFO")
 
     return is_healthy, failed_items
+
+async def playwright_lifecycle_manager(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback):
+    """
+    Hàm này lo vòng đời của Playwright: Khởi tạo -> Chạy Logic -> Đóng dọn.
+    Nó giống hệt cái khung try...finally của Selenium bên dưới.
+    """
+    # Bước 1: Khởi tạo Context (Driver)
+    context = await init_driver_from_profile_playwright(profile_path, log_callback)
+    if not context:
+        return False, list(file_batch) # Lỗi ngay từ lúc bật profile
+
+    try:
+        # Bước 2: Truyền context vào Handler để làm nghiệp vụ chính
+        # (Lưu ý: handle_prompt_to_video của Playwright giờ cũng phải là async def)
+        is_healthy, failed_items = await handle_prompt_to_video_async(
+            context, file_batch, assets_path, prefix_prompt, url, log_callback
+        )
+        return is_healthy, failed_items
+        
+    except Exception as e:
+        log_callback(f"🔥 CRASH PLAYWRIGHT WORKER: {e}", "ERROR")
+        return False, list(file_batch)
+        
+    finally:
+        # Bước 3: Dọn dẹp
+        try: 
+            await context.close()
+            if hasattr(context, 'playwright_instance'):
+                await context.playwright_instance.stop()
+        except: 
+            pass
+
+
+def run_playwright_batch_sync(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback):
+    """HÀM CẦU NỐI: Bọc Async vào Sync"""
+    try:
+        return asyncio.run(
+            playwright_lifecycle_manager(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback)
+        )
+    except Exception as e:
+        # BẮT BUỘC PHẢI CÓ DÒNG NÀY ĐỂ BẮT ĐƯỢC BỆNH
+        log_callback(f"🔥 CẦU NỐI PLAYWRIGHT CRASH: {e}", "ERROR")
+        return False, list(file_batch)

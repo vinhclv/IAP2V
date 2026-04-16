@@ -1,9 +1,9 @@
 {
     "system": {
         "max_threads": 4,
-        "loop_limit": 2,
+        "loop_limit": 20,
         "max_retries": 10,
-        "wait_time": 100
+        "wait_time": 90
     },
     "urls": {
         "gemini_url": "https://gemini.google.com",
@@ -50,6 +50,11 @@
             "name": "SH_3",
             "url": "https://gemini.google.com/gem/14wKFBKqU5C2T8Omoi0EGB8cSfOBhW_i4?usp=sharing",
             "description": "The output of this GEM consists of images in the Minimalist Sketchbook Doodle style:\n\nMaterial & Brushstrokes: Looks like hand-drawn doodles using ballpoint pen or thin felt-tip pen on rough sketchbook paper or faded lined paper. The strokes intentionally retain a slight shake, appearing somewhat scribbled and handcrafted.\n\nColor & Space: * When the quote is strong/decisive: Bold, decisive ink strokes combined with warm golden light (Golden Highlights) as accents.\n\nWhen the quote is gentle/contemplative: Slender strokes, plenty of empty space (negative space) on paper with soothing tones (light moss green, warm earthy colors, ivory).\n\nWhen it is a transition sentence (no character): The scene transforms into notebook margin doodles (spirals, leaves, wavy lines) or artistic rustic handwriting.\n\nOverall feeling (Vibe): Minimalist, intimate, safe, and deeply personal—like you are flipping through the diary of someone who always carries positive energy."
+        },
+        {
+            "name": "flow",
+            "url": "https://labs.google/fx/vi/tools/flow",
+            "description": "Mô tả..."
         }
     ],
     "standardize": {

@@ -1,359 +1,318 @@
 import os
 import time
-import base64
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import random
-from selenium.webdriver.common.action_chains import ActionChains 
-import config
-
-def robust_click(driver, element):
-    try:
-        element.click()
-        return True
-    except:
-        try:
-            driver.execute_script("arguments[0].click();", element)
-            return True
-        except Exception as e:
-            print(f"❌ Click thất bại: {e}")
-            return False
-
-def human_click_offset(driver, element):
-    width = element.size['width']
-    height = element.size['height']
-    # Click ngẫu nhiên trong phạm vi của nút, không click vào tâm
-    offset_x = random.randint(-int(width/4), int(width/4))
-    offset_y = random.randint(-int(height/4), int(height/4))
-
-    actions = ActionChains(driver)
-    actions.move_to_element_with_offset(element, offset_x, offset_y)
-    actions.pause(random.uniform(0.2, 0.5))
-    actions.click().perform()
-
-def human_type(driver, element, text):
-    element.click()
-    time.sleep(random.uniform(0.5, 1.0))
-
-    # Chiến thuật: GÕ THEO CỤM (CHUNKING)
-    # Giúp giảm 90% độ trễ giao tiếp giữa Python và Trình duyệt
+import json
+from playwright.sync_api import Page, Locator
+import config # Giả sử bạn vẫn dùng file config.py để lưu setting
+import re
+async def human_type(locator: Locator, text: str, page: Page):
     
+    await locator.click()
+    await page.wait_for_timeout(random.uniform(200, 400))
+
     idx = 0
     while idx < len(text):
-        # 1. Lấy một cụm ký tự ngẫu nhiên (từ 4 đến 10 ký tự)
-        # Giống như người ta gõ nhanh một từ hoặc một cụm từ
-        chunk_size = random.randint(4, 10)
+        chunk_size = random.randint(15, 30)
         chunk = text[idx:idx+chunk_size]
         
-        # 2. Gửi cả cụm đi một lúc
-        element.send_keys(chunk)
-        
+        # 3. Ép tốc độ gõ phím siêu tốc: 5-10ms cho mỗi ký tự
+        await locator.press_sequentially(chunk, delay=random.randint(5, 10))
         idx += chunk_size
         
-        # 3. Delay cực ngắn giữa các cụm (0.05 - 0.15s)
-        # Tốc độ này tương đương người gõ máy tốc ký
-        time.sleep(random.uniform(0.05, 0.15))
+        # 4. Thời gian nghỉ giữa các cụm cực ngắn (20-50ms)
+        await page.wait_for_timeout(random.uniform(20, 50))
         
-        # 4. Thỉnh thoảng dừng lại xíu (ngẫu nhiên 10% cơ hội) như đang suy nghĩ
-        if random.random() < 0.1:
-            time.sleep(random.uniform(0.2, 0.5))
+        # 5. Giảm tỷ lệ "suy nghĩ" xuống còn 5% và thời gian khựng cũng ngắn lại
+        if random.random() < 0.05:
+            await page.wait_for_timeout(random.uniform(100, 200))
 
-    time.sleep(random.uniform(0.5, 1.0))
+    # 6. Giảm thời gian chờ chốt hạ
+    await page.wait_for_timeout(random.uniform(200, 400))
 
+async def setup_video_creation_mode(page: Page):
+    print("⚙️ Đang cấu hình giao diện (Mode -> Landscape -> Qty=1 -> Quality Model)...")
+
+    try:
+        # 1. Tạo dự án
+        create_btn = page.locator("i:has-text('add_2')").first
+        if await create_btn.is_visible(timeout=45000):
+            await create_btn.click(timeout=5000)
+            await page.wait_for_timeout(1000)
+        
+        print("Đang chọn chế độ video...")
+        dropdown_btn = page.locator("button[type='button'][aria-haspopup='menu']", has_text=re.compile(r"Banana|Video", re.IGNORECASE)).first
+        
+        # Chờ nút xuất hiện và sẵn sàng click
+        await dropdown_btn.wait_for(state="visible", timeout=45000)
+        
+        # Dùng click của Playwright (isTrusted = true). 
+        # Thêm delay để giả lập người bấm. Thêm force=True để ép click nếu web có thẻ div ẩn đè lên.
+        await dropdown_btn.click(delay=random.randint(50, 150), force=True)
+        await page.wait_for_timeout(1000) # Nghỉ 1s chờ menu xổ ra mượt mà
+
+        await page.locator("i:has-text('videocam')").last.click(timeout=5000)
+        await page.wait_for_timeout(500)
+        print("Đang chọn chế độ thành phần...")
+
+        # 3. Chế độ Thành phần
+        await page.locator("i:has-text('chrome_extension')").first.click(timeout=5000)
+        await page.wait_for_timeout(500)
+        print("Đang chọn khung hình...")
+
+        # 4. Khung hình
+        await page.locator("i:has-text('crop_16_9')").last.click(timeout=5000)
+        await page.wait_for_timeout(500)
+        print("Đang chọn model...")
+
+        # 5. Chọn Model
+        await page.locator("i:has-text('arrow_drop_down')").first.click(timeout=5000)
+        await page.wait_for_timeout(500)
+        await page.locator("i:has-text('volume_up')").nth(1).click(timeout=5000)
+        await page.wait_for_timeout(500)
+        print("Đang chọn số lượng = 1...")
+
+        # 6. Số lượng = 1
+        await page.locator("button.flow_tab_slider_trigger", has_text="x1").first.click(timeout=5000)
+        await page.wait_for_timeout(500)
+        print("Đang đóng bảng...")
+
+        # 7. Đóng bảng
+        await page.locator("i:has-text('crop_16_9')").first.click(timeout=5000)
+        await page.wait_for_timeout(500)
+        print("✅ Đã cấu hình xong!")
+
+    except Exception as e:
+        print(f"⚠️ Dừng ngay tại lỗi: {e}")
+
+# --- HÀM MỚI: TIÊM JS RADAR VÀO TRANG WEB ---
+async def inject_radar_js(page: Page):
+    """Tiêm đoạn JS săn lùng vào thẳng trình duyệt để nó chạy ngầm"""
     
-# --- HÀM 2: CẤU HÌNH GIAO DIỆN (FULL OPTION: MODE + RATIO + QUANTITY) ---
-def setup_video_creation_mode(driver):
-    wait = WebDriverWait(driver, 5) 
-    print("⚙️ Đang cấu hình giao diện (Mode -> Landscape -> Qty=1)...")
+    # THÊM CHỮ 'r' VÀO TRƯỚC DẤU NGOẶC KÉP
+    js_interceptor = r"""
+    (function() {
+        window._python_results = window._python_results || {};
+        window._mediaIdToSTT = window._mediaIdToSTT || {};
+        window._completedSTTs = window._completedSTTs || new Set(); 
+        window._isInterceptorInjected = window._isInterceptorInjected || false;
 
-    try:
-        # 1. Click nút "Tạo dự án"
-        try:
-            create_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/button")))
-            create_btn.click()
-            time.sleep(random.uniform(0.5, 1.5))
-        except:
-            print("⚠️ Bỏ qua 'Tạo dự án'.")
+        if (window._isInterceptorInjected) return;
+        window._isInterceptorInjected = true;
+        console.log("%c[HỆ THỐNG] 🚀 ĐÃ BƠM RADAR BẮT SỐNG (ZERO LATENCY)...", "color: #ff00ff; font-size: 16px; font-weight: bold;");
 
-        # 2. Chuyển sang tab "Video"
-        try:
-            video_tab = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/div[1]/div[2]/div[1]/div/div[1]/button[1]")))
-            video_tab.click()
-            time.sleep(1)
-        except:
-            print("⚠️ Bỏ qua Tab Video.")
+        // 1. CƯỚP CÒ XHR: Bắt link ngay lúc trình duyệt vừa tạo request
+        const origOpen = XMLHttpRequest.prototype.open;
+        const origSend = XMLHttpRequest.prototype.send;
 
-        # 3. Mở Dropdown chọn chế độ
-        try:
-            mode_dropdown = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[1]/div[1]/button")))
-            human_click_offset(driver, mode_dropdown)
-            time.sleep(random.uniform(1, 2))
-
-            # 4. Chọn "Tạo video từ các thành phần"
-            print("🎯 Chọn chế độ Thành phần...")
-            component_icon = wait.until(EC.presence_of_element_located((
-                By.XPATH, "/html/body/div[3]/div/div/div[3]/div/i"
-            )))
-            driver.execute_script("arguments[0].click();", component_icon)
-            print("✅ Đã chọn chế độ: Tạo video từ các thành phần")
-            time.sleep(random.uniform(1, 2))
+        XMLHttpRequest.prototype.open = function(method, url) {
+            this._intercept_url = typeof url === 'string' ? url : url.toString();
             
-        except Exception as e:
-            print(f"⚠️ Lỗi chọn chế độ: {e}")
-
-        # 5. Mở Cấu hình (Settings)
-        try:
-            settings_btn = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[1]/div[2]/button[2]")))
-            human_click_offset(driver, settings_btn)
-            time.sleep(random.uniform(1, 2)) # Chờ bảng settings hiện ra
-
-            # --- MỚI: CẤU HÌNH KHỔ NGANG (LANDSCAPE) ---
-            print("🎯 Cấu hình Khổ ngang (Landscape)...")
-            # Click Dropdown Tỷ lệ khung hình (Nút bên trái)
-            ratio_dropdown = wait.until(EC.element_to_be_clickable((
-                By.XPATH, "/html/body/div[3]/div/div/div[1]/div[1]/button"
-            )))
-            human_click_offset(driver, ratio_dropdown)
-            time.sleep(random.uniform(1, 2)) # Chờ menu tỷ lệ nảy ra ở div[4]
-
-            # Chọn Option (Khổ ngang)
-            landscape_option = wait.until(EC.presence_of_element_located((
-                By.XPATH, "/html/body/div[4]/div/div/div[1]/div/span"
-            )))
-            driver.execute_script("arguments[0].click();", landscape_option)
-            print("✅ Đã chọn Khổ ngang")
-            time.sleep(1) # Chờ menu đóng lại
-            
-            # --- CẤU HÌNH SỐ LƯỢNG = 1 ---
-            print("🎯 Cấu hình Số lượng = 1...")
-            # Click Dropdown Số lượng (Nút bên phải)
-            quantity_dropdown = wait.until(EC.element_to_be_clickable((
-                By.XPATH, "/html/body/div[3]/div/div/div[1]/div[2]/button"
-            )))
-            human_click_offset(driver, quantity_dropdown)
-            time.sleep(random.uniform(1, 2)) 
-
-            # Chọn Option 1
-            # (Lưu ý: Bạn dùng chung XPath với landscape vì nó đều là mục đầu tiên trong list)
-            option_one = wait.until(EC.presence_of_element_located((
-                By.XPATH, "/html/body/div[4]/div/div/div[1]/div/span"
-            )))
-            driver.execute_script("arguments[0].click();", option_one)
-            print("✅ Đã cấu hình Số lượng: 1")
-            
-            # Đóng bảng Settings
-            driver.execute_script("document.body.click();")
-            
-        except Exception as e:
-            print(f"⚠️ Lỗi cấu hình Settings (Ratio/Quantity): {e}")
-
-        return True
-    except Exception as e:
-        print(f"❌ Lỗi cấu hình tổng: {e}")
-        return True
-
-def upload_stealth(driver, file_path):
-    try:
-        wait = WebDriverWait(driver, 15)
-        abs_path = os.path.abspath(file_path)
-        
-        # 1. Click nút "Thêm" / "Upload" để kích hoạt input file (nếu cần)
-        # Trong VideoFX, nút này thường là dấu + to hoặc chữ "Thêm hình ảnh/video"
-        try:
-            upload_trigger = driver.find_element(By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[2]/div[1]/div/div/button")
-            if upload_trigger.is_displayed():
-                upload_trigger.click()
-                time.sleep(random.uniform(1, 2))
-        except:
-            pass # Có thể input đã có sẵn trong DOM
-
-        # 2. Tìm thẻ input type=file
-        # Thử tìm input file. Nếu nó ẩn, Selenium vẫn find_element được nếu nó tồn tại trong DOM.
-        try:
-            file_inputs = driver.find_elements(By.XPATH, "/html/body/div[1]/div[3]/div/div/input")
-            if not file_inputs:
-                print("❌ Không tìm thấy thẻ <input type='file'> nào trong DOM.")
-                return False
-            
-            # Lấy input đầu tiên hoặc input đang hiển thị (nếu có)
-            file_input = file_inputs[0] 
-            
-
-            # 4. Gửi đường dẫn file
-            file_input.send_keys(abs_path)
-            
-            # 5. Kích hoạt sự kiện change
-            driver.execute_script("""
-                var input = arguments[0];
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            """, file_input)
-            
-            print(f"✅ Đã upload thành công: {os.path.basename(file_path)}")
-            time.sleep(random.uniform(3, 5)) 
-            
-            cut_and_save_button = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[3]/div[3]/div/div/div[2]/div/button[3]")))
-            
-            # Click nút
-            human_click_offset(driver, cut_and_save_button)
-            print(f"✅ Đã bấm nút Lưu ảnh: {os.path.basename(file_path)}")
-            
-            return True
-        except Exception as e:
-            print(f"❌ Lỗi khi tương tác với input file: {e}")
-            return False
-
-    except Exception as e:
-        print(f"❌ Lỗi Upload tổng quát {os.path.basename(file_path)}: {e}")
-        return False 
-# --- HÀM 3: TẢI VIDEO (GIỮ NGUYÊN) ---
-def download_blob_video(driver, video_element, save_path):
-    try:
-        video_src = video_element.get_attribute("src")
-        if not video_src: return False
-
-        print("📥 Đang tải video blob về máy...")
-        
-        # Dùng script async để tải blob
-        base64_data = driver.execute_async_script("""
-            var uri = arguments[0];
-            var callback = arguments[1];
-            var xhr = new XMLHttpRequest();
-            xhr.responseType = 'blob';
-            xhr.onload = function() {
-                var reader = new FileReader();
-                reader.onloadend = function() {
-                    callback(reader.result);
+            // Soi ngay xem có phải link tải video không
+            let checkUrl = this._intercept_url;
+            if (!checkUrl.toLowerCase().includes("thumbnail") && 
+                (checkUrl.includes("GoogleAccessId") || checkUrl.includes("media.getMediaUrlRedirect") || checkUrl.includes("storage.googleapis.com"))) {
+                for (let [mediaId, stt] of Object.entries(window._mediaIdToSTT)) {
+                    if (checkUrl.includes(mediaId) && !window._completedSTTs.has(stt)) {
+                        window._completedSTTs.add(stt);
+                        window._python_results[stt] = checkUrl;
+                    }
                 }
-                reader.readAsDataURL(xhr.response);
-            };
-            xhr.onerror = function() {
-                callback(null);
-            };
-            xhr.open('GET', uri);
-            xhr.send();
-        """, video_src)
+            }
+            origOpen.apply(this, arguments);
+        };
 
-        if base64_data:
-            if "," in base64_data:
-                base64_data = base64_data.split(",")[1]
+        XMLHttpRequest.prototype.send = function() {
+            this.addEventListener('load', function() {
+                if (this._intercept_url.includes("batchCheckAsyncVideoGenerationStatus") || 
+                    this._intercept_url.includes("batchAsyncGenerateVideoText")) {
+                    try {
+                        let text = this.responseText.replace(/^\)\]\}'\n/, '');
+                        let data = JSON.parse(text);
+                        let mediaArr = data.media || (data.result && data.result.media) || [];
+                        
+                        mediaArr.forEach(item => {
+                            let mediaId = item?.name;
+                            let rawPrompt = item?.mediaMetadata?.requestData?.promptInputs?.[0]?.structuredPrompt?.parts?.[0]?.text || "";
+                            let genPrompt = item?.video?.generatedVideo?.prompt || "";
+                            let titlePrompt = item?.mediaMetadata?.mediaTitle || "";
+                            let match = (`${rawPrompt} | ${genPrompt} | ${titlePrompt}`).match(/\|\|(.*?)\|\|/);
+
+                            if (match && mediaId && !window._mediaIdToSTT[mediaId]) {
+                                window._mediaIdToSTT[mediaId] = match[1].trim();
+                            }
+                        });
+                    } catch(e) {}
+                }
+            });
+            origSend.apply(this, arguments);
+        };
+
+        // 2. CƯỚP CÒ FETCH: Bắt link ở cửa Fetch
+        const origFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const url = args[0]?.url || args[0] || "";
             
-            with open(save_path, "wb") as f:
-                f.write(base64.b64decode(base64_data))
-            return True
-        return False
-    except Exception as e:
-        print(f"❌ Lỗi download blob: {e}")
-        return False
+            // Soi link Fetch trước khi nó bay đi
+            if (typeof url === 'string' && !url.toLowerCase().includes("thumbnail") && 
+               (url.includes("GoogleAccessId") || url.includes("media.getMediaUrlRedirect") || url.includes("storage.googleapis.com"))) {
+                for (let [mediaId, stt] of Object.entries(window._mediaIdToSTT)) {
+                    if (url.includes(mediaId) && !window._completedSTTs.has(stt)) {
+                        window._completedSTTs.add(stt);
+                        window._python_results[stt] = url;
+                    }
+                }
+            }
 
-def process_video_batch(driver, file_batch, output_folder, log_callback=print):
-    # Khởi tạo môi trường
-    setup_video_creation_mode(driver)
-    wait = WebDriverWait(driver, 15)
-    tasks = {} 
+            const response = await origFetch.apply(this, args);
+            // Soi JSON trạng thái
+            if (typeof url === 'string' && url.includes("batchCheckAsyncVideoGenerationStatus")) {
+                const clone = response.clone();
+                clone.text().then(text => {
+                    try {
+                        let cleaned = text.replace(/^\)\]\}'\n/, '');
+                        let data = JSON.parse(cleaned);
+                        let mediaArr = data.media || [];
+                        mediaArr.forEach(item => {
+                            let mediaId = item?.name;
+                            let raw = item?.mediaMetadata?.requestData?.promptInputs?.[0]?.structuredPrompt?.parts?.[0]?.text || "";
+                            let gen = item?.video?.generatedVideo?.prompt || "";
+                            let title = item?.mediaMetadata?.mediaTitle || "";
+                            let match = (`${raw} | ${gen} | ${title}`).match(/\|\|(.*?)\|\|/);
+                            if (match && mediaId && !window._mediaIdToSTT[mediaId]) {
+                                window._mediaIdToSTT[mediaId] = match[1].trim();
+                            }
+                        });
+                    } catch(e) {}
+                }).catch(e=>{});
+            }
+            return response;
+        };
+
+        // 3. QUÉT DOM SIÊU TỐC (Backup)
+        // Lỡ trình duyệt giấu link tải đi đâu đó mà gắn thẳng lên giao diện, ta mò trên UI
+        setInterval(() => {
+            const mediaElements = document.querySelectorAll('video, source');
+            mediaElements.forEach(el => {
+                let url = el.src || el.currentSrc || "";
+                if (!url || typeof url !== 'string' || url.toLowerCase().includes("thumbnail")) return;
+
+                if (url.includes("GoogleAccessId") || url.includes("media.getMediaUrlRedirect") || url.includes("storage.googleapis.com")) {
+                    for (let [mediaId, stt] of Object.entries(window._mediaIdToSTT)) {
+                        if (url.includes(mediaId) && !window._completedSTTs.has(stt)) {
+                            window._completedSTTs.add(stt); 
+                            window._python_results[stt] = url;
+                        }
+                    }
+                }
+            });
+        }, 500); // Quét 2 lần mỗi giây
+
+    })();
+    """
+    await page.evaluate(js_interceptor)
+
+# --- HÀM 4: CỐT LÕI - XỬ LÝ BATCH ---
+async def process_video_batch(page: Page, file_batch: list, output_folder: str, log_callback=print):
+    """
+    Tham số `file_batch` nhận đầu vào là mảng list chứa các object.
+    """
+
     
-    # [MỚI 1] Tập hợp chứa các URL video đã tải trong phiên này
+    tasks = {} 
     downloaded_urls = set() 
 
-    # --- GIAI ĐOẠN 1: SUBMIT (Giữ nguyên) ---
-    for index, item_path in enumerate(file_batch):
-        # ... (Phần code submit giữ nguyên không đổi) ...
-        # (Copy lại phần submit của bạn vào đây)
-        file_name = os.path.basename(item_path)
-        full_name_id = os.path.splitext(file_name)[0]
-        parent_dir = os.path.dirname(item_path)
-        video_dir = os.path.join(parent_dir, "video")
-        save_path = os.path.join(video_dir, f"{full_name_id}_8s.mp4")
+    # --- GIAI ĐOẠN 1: SUBMIT (Lấy Data từ Object Dictionary) ---
+    for item in file_batch:
+        stt = str(item.get("STT", "")).strip()
+        if not stt: continue
+        
+        save_path = item.get("video_path")
+        
+        prompt_text = item.get("visual_details", "Cinematic masterpiece, hyper detailed")
         
         if os.path.exists(save_path):
-            log_callback(f"⏭️ Bỏ qua: {full_name_id}")
+            log_callback(f"⏭️ Bỏ qua STT {stt} (Đã có video)")
             continue
 
-        id_tag = f"||{full_name_id}||"
-        tasks[full_name_id] = {
+        id_tag = f"||{stt}||"
+        tasks[stt] = {
             "save_path": save_path,
             "id_tag": id_tag,
             "done": False,
-            "file_path": item_path
+            "original_item": item
         }
         
         try:
-            if not upload_stealth(driver, item_path): continue
-            textbox = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/textarea")))
-            prompt_path = os.path.join(parent_dir, "prompt.txt")
-            base_prompt = open(prompt_path, "r", encoding="utf-8").read().strip() if os.path.exists(prompt_path) else "Cinematic"
-            human_type(driver, textbox, f"{id_tag} {base_prompt}")
-            xpath_btn = "/html/body/div[1]/div[2]/div/div/div[2]/div/div[1]/div[2]/div/div/div[2]/div[2]/button[2]"
-            wait_btn = WebDriverWait(driver, 20)
-            btn_gen = wait_btn.until(EC.element_to_be_clickable((By.XPATH, xpath_btn)))
-            time.sleep(random.uniform(0.5, 1.0))
-            human_click_offset(driver, btn_gen)
-            log_callback(f"📤 Đã gửi: {full_name_id}")
-            time.sleep(random.uniform(5, 8)) 
+            textbox = page.locator("[role='textbox']")
+            await textbox.wait_for(state="visible", timeout=15000) 
+            
+            # GỌI HÀM VÀ THÊM AWAIT Ở ĐÂY
+            await human_type(textbox, f"{id_tag} {prompt_text}", page)
+            
+            await page.wait_for_timeout(random.uniform(1000, 2000))
+            
+            btn_gen = page.locator("i:has-text('arrow_forward')").first
+            await btn_gen.wait_for(state="visible", timeout=15000) 
+            await btn_gen.click()
+            await page.wait_for_timeout(random.uniform(5000, 6000))
+            
         except Exception as e:
-            log_callback(f"❌ Lỗi gửi {full_name_id}: {e}")
-            tasks.pop(full_name_id, None)
+            log_callback(f"❌ Lỗi gửi STT {stt}: {e}")
+            tasks.pop(stt, None) 
 
-    # --- GIAI ĐOẠN 2: COLLECT (CẬP NHẬT LOGIC URL CHECK) ---
-    if not tasks: return False, file_batch
+    if not tasks: 
+        return False, file_batch 
 
-    log_callback(f"⏳ Chờ render {len(tasks)} video...")
+    # --- GIAI ĐOẠN 2: COLLECT (Bằng cách đọc kết quả từ JS Radar) ---
+    log_callback(f"⏳ Chờ render {len(tasks)} video qua Radar JS...")
     start_time = time.time()
     
-    while time.time() - start_time < config.global_settings["system"]["wait_time"]:
+    # Ở đây mình tạm hardcode timeout. Nên thay bằng config.global_settings["system"]["wait_time"]
+    wait_time_limit =  config.global_settings["system"]["wait_time"]
+    
+    while time.time() - start_time < wait_time_limit:
         active_tasks = [uid for uid, info in tasks.items() if not info["done"]]
         if not active_tasks: 
-            log_callback("✅ Tất cả video đã tải xong!")
+            log_callback("✅ Tất cả video trong đợt này đã tải xong!")
             break
+
+        # Đọc biến window._python_results từ trình duyệt
+        js_results_str = await page.evaluate("JSON.stringify(window._python_results || {})")
+        js_results = json.loads(js_results_str)
 
         for uid in active_tasks:
             info = tasks[uid]
-            try:
-
-                xpath_check = f"//*[contains(text(), '{info['id_tag']}')]/ancestor::div[@data-index][1]//video"
-
-                videos = driver.find_elements(By.XPATH, xpath_check)
+            
+            # Nếu JS Radar đã bắt được link của STT này
+            if uid in js_results:
+                video_url = js_results[uid]
                 
-                if videos:
-                    video_el = videos[0]
-                    current_src = video_el.get_attribute("src")
-                    
-                    # Nếu src rỗng hoặc null -> Bỏ qua
-                    if not current_src or current_src == "null":
-                        continue
-
-                    # [QUAN TRỌNG] Kiểm tra xem URL này đã tải chưa
-                    if current_src in downloaded_urls:
-                        continue 
-
-                    # Kiểm tra readyState
-                    rs = driver.execute_script("return arguments[0].readyState;", video_el)
-                    
-                    if rs == 4: # Video đã tải xong (HAVE_ENOUGH_DATA)
-                        os.makedirs(os.path.dirname(info["save_path"]), exist_ok=True)
-                        log_callback(f"💾 Phát hiện Video mới: {uid}")
+                # Tránh tải lại link đã tải
+                if video_url in downloaded_urls:
+                    continue
+                
+                os.makedirs(os.path.dirname(info["save_path"]), exist_ok=True)
+                log_callback(f"💾 Bắt đầu tải Video xịn: STT {uid}")
+                
+                try:
+                    # Dùng API của Playwright để tải thẳng file MP4
+                    response = await page.request.get(video_url)
+                    with open(info["save_path"], "wb") as f:
+                        f.write(await response.body())
                         
-                        if download_blob_video(driver, video_el, info["save_path"]):
-                            if os.path.exists(info["save_path"]) and os.path.getsize(info["save_path"]) > 0:
-                                log_callback(f"✅ Thành công: {uid}")
-                                info["done"] = True
-                                
-                                # Thêm vào danh sách đen để không tải lại
-                                downloaded_urls.add(current_src)
-                            else:
-                                log_callback(f"⚠️ Lỗi 0KB: {uid}")
-                    
-                    elif rs == 0: 
-                        # Kích hoạt video ngủ (nếu cần)
-                        driver.execute_script("arguments[0].play().then(()=>arguments[0].pause()).catch(()=>{});", video_el)
-                        
-            except Exception as e:
-                pass
-        time.sleep(3) 
+                    if os.path.exists(info["save_path"]) and os.path.getsize(info["save_path"]) > 0:
+                        log_callback(f"✅ Thành công: STT {uid}")
+                        info["done"] = True
+                        downloaded_urls.add(video_url)
+                    else:
+                        log_callback(f"⚠️ Lỗi tải file bị 0KB: STT {uid}")
+                except Exception as e:
+                    log_callback(f"❌ Lỗi download MP4 STT {uid}: {e}")
 
-    # --- TỔNG KẾT ---
-    failed = [v["file_path"] for k, v in tasks.items() if not v["done"]]
-    return len(failed) == 0, failed
+        await page.wait_for_timeout(3000) # Quét lại sau mỗi 3 giây
+
+    # --- TỔNG KẾT BATCH ---
+    # Những object nào chưa "done" thì trả nguyên gốc lại để cho vào hàng đợi retry
+    failed_objects = [v["original_item"] for k, v in tasks.items() if not v["done"]]
+    
+    return len(failed_objects) == 0, failed_objects

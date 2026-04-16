@@ -79,7 +79,7 @@ class BatchProcessor:
                 case "shuffle_image":
                     pending, _ = get_shuffle_image_status(inp, out)
                 case _:
-                    pending, _ = get_prompt_video_status(out)
+                    pending, _ = get_prompt_video_status(inp,out)
 
             if not pending:
                 self.log(f"✅ Dự án {os.path.basename(inp)} hoàn thành!", "SUCCESS")
@@ -152,7 +152,7 @@ class BatchProcessor:
                         actual_pending, _ = get_shuffle_image_status(inp_path, out_path)
                         batch = [item for item in candidates if item in actual_pending]
                     case _: # prompt_video 
-                        actual_pending, _ = get_prompt_video_status(out_path)
+                        actual_pending, _ = get_prompt_video_status(inp_path,out_path)
                         batch = [item for item in candidates if item in actual_pending]
                 
             if not batch: continue
@@ -194,7 +194,7 @@ class BatchProcessor:
                         case "shuffle_image":
                             pending, completed = get_shuffle_image_status(inp, out)
                         case _: # prompt_video
-                            pending, completed = get_prompt_video_status(out)
+                            pending, completed = get_prompt_video_status(inp,out)
 
                     t = len(pending) + len(completed)
                     update_ui_callback(t, len(pending), len(completed))

@@ -22,33 +22,54 @@ def get_image_prompt_status(img_dir, out_dir):
             
     return pending, completed
 
-def get_prompt_video_status(out_dir):
-    """Quét trạng thái video"""
-    if not os.path.exists(out_dir): return [], []
+def get_prompt_video_status(json_path, out_dir):
+    """
+    Đọc file JSON đầu vào và kiểm tra trạng thái tiến độ tạo video.
+    Quét trực tiếp trong thư mục out_dir để tìm file {STT}_8s.mp4
+    """
+    pending = []
+    completed = []
     
-    subfolders = [f for f in os.listdir(out_dir) if os.path.isdir(os.path.join(out_dir, f))]
-    pending, completed = [], []
-    
-    for sub in subfolders:
-        sub_path = os.path.join(out_dir, sub)
-        prompt_path = os.path.join(sub_path, "prompt.txt")
-        
-        # Chỉ tính những folder ĐÃ CÓ prompt.txt
-        if os.path.exists(prompt_path):
-            imgs = [f for f in os.listdir(sub_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
-            if not imgs: continue
-            img_full_path = os.path.join(sub_path, imgs[0])
-            
-            video_dir = os.path.join(sub_path, "video")
-            is_done = False
-            if os.path.exists(video_dir):
-                if any(f.endswith('_8s.mp4') for f in os.listdir(video_dir)): is_done = True
-            
-            if is_done: completed.append(img_full_path)
-            else: pending.append(img_full_path)
-            
-    return pending, completed
+    if not os.path.exists(json_path):
+        print(f"⚠️ Không tìm thấy file JSON: {json_path}")
+        return [], []
 
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        for item in data:
+            stt_str = str(item.get("STT", "")).strip()
+            if not stt_str:
+                continue
+                
+            task_item = item.copy()
+            task_item["json_path"] = json_path
+            task_item["video_path"] = None
+
+            is_done = False
+            
+            # --- ĐOẠN SỬA LÕI Ở ĐÂY ---
+            # Ghép thẳng tên file đích: out_dir/STT_8s.mp4
+            expected_filename = f"{stt_str}_8s.mp4"
+            expected_video_path = os.path.join(out_dir, expected_filename)
+            task_item["video_path"] = expected_video_path
+
+            # Kiểm tra đích danh file đó có tồn tại không
+            if os.path.exists(expected_video_path):
+                is_done = True
+            # ---------------------------
+            
+            # Phân loại task
+            if is_done:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+
+    except Exception as e:
+        print(f"❌ Lỗi xử lý JSON: {e}")
+        
+    return pending, completed
 def get_srt_prompt_status(srt_path, output_dir):
     """
     Đọc file .srt và kiểm tra trạng thái dựa trên file JSON tổng nằm trong output_dir.

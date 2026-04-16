@@ -192,7 +192,7 @@ class DashboardTab(ttk.Frame):
 
     def _pick_input(self):
         mode = self.selected_mode.get()
-        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image"]
+        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image", "Prompt ➡ Video"]
         
         if mode in file_modes:
             if "SRT" in mode:

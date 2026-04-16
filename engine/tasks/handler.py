@@ -1,7 +1,7 @@
 import os
 import shutil
 from engine.tasks.image_to_prompt import process_image_to_prompt
-from engine.tasks.image_and_prompt_to_video import process_video_batch
+from engine.tasks.image_and_prompt_to_video import process_video_batch, setup_video_creation_mode, inject_radar_js
 from engine.tasks.srt_to_prompt import process_srt_to_prompt
 from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
@@ -10,8 +10,10 @@ from engine.tasks.srt_to_multilanguage import process_srt_multilanguage
 from engine.tasks.srt_to_shuffle import process_srt_shuffle
 import time
 import re
+import random
 import config
 from urllib.parse import urlparse
+
 def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý danh sách ảnh để tạo prompt.
@@ -84,66 +86,95 @@ def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, 
 
     # Nếu làm được ít nhất 1 cái (hoặc skip do đã có) -> Profile OK
     return True, failed_list
-
-def handle_prompt_to_video(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
-    # 1. Vào trang & Check Login
-    driver.get(url)
-    time.sleep(5)
+async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_prompt, url, log_callback):
+    """
+    Xử lý batch prompt sang video.
+    Băm nhỏ cục file_batch lớn (VD: 50 object) thành các mẻ nhỏ 4 object để tránh spam.
+    Lưu ý: tham số đầu tiên nhận vào là Playwright BrowserContext.
+    """
+    # 2. THÊM 'await' KHI TẠO TAB MỚI
+    page = await context.new_page() 
     
-    if "accounts.google.com" in driver.current_url:
-        log_callback("❌ Profile bị logout -> Dừng.")
-        return False, file_batch # False = Profile Hỏng
+    try:
+        # 3. THÊM 'await' CHO CÁC LỆNH CỦA TRÌNH DUYỆT
+        await page.goto(url, timeout=60000) 
+        await page.wait_for_timeout(5000)   
+        
+        # Check current_url bằng page.url (Thuộc tính này không cần await)
+        if "accounts.google.com" in page.url:
+            log_callback("❌ Profile bị logout -> Dừng.")
+            return False, file_batch 
 
-    # 2. Chuẩn bị Batch
-    CHUNK_SIZE = 3
-    chunks = [file_batch[i:i + CHUNK_SIZE] for i in range(0, len(file_batch), CHUNK_SIZE)]
-    
-    failed_total = []
-    consecutive_batch_errors = 0 # Đếm số batch bị lỗi liên tiếp
-    
-    # 3. Chạy từng Chunk
-    for i, chunk in enumerate(chunks):
-        # Gọi hàm xử lý cốt lõi
-        is_batch_ok, failed_in_chunk = process_video_batch(driver, chunk, None, log_callback)
-        
-        # Cộng dồn file lỗi vào danh sách tổng
-        if failed_in_chunk:
-            failed_total.extend(failed_in_chunk)
-            
-        
-        # 1. Tính toán tỷ lệ
-        total_items = len(chunk) # Thường là 5
-        failed_count = len(failed_in_chunk)
-        success_count = total_items - failed_count
-        
-        if is_batch_ok or (success_count >= total_items / 2):
-            
-            # Reset bộ đếm lỗi vì Profile vẫn làm việc được
-            consecutive_batch_errors = 0
-            
-            if not is_batch_ok:
-                log_callback(f"⚠️ Batch {i+1} không hoàn hảo ({success_count}/{total_items} xong) -> Nhưng >50% nên vẫn giữ Profile.")
-        
-        else:
-            # 3. Trường hợp Fail nặng (< 50% thành công)
-            consecutive_batch_errors += 1
-            log_callback(f"❌ Batch {i+1} fail (chỉ xong {success_count}/{total_items}).")
-            
-            if consecutive_batch_errors >= 2:
-                log_callback("💀 Profile yếu quá (2 batch fail liên tiếp) -> Dừng.")
-                
-                # Trả nốt file chưa kịp chạy
-                remaining_chunks = chunks[i+1:]
-                for c in remaining_chunks:
-                    failed_total.extend(c)
-                    
-                return False, failed_total 
-    # 4. Kiểm tra kết quả cuối cùng
-    if len(failed_total) == len(file_batch):
-        log_callback("❌ Toàn bộ file trong lượt này đều thất bại.")
-        return False, failed_total 
+        # # ==========================================
+        # # 🧹 TUYỆT CHIÊU: TẨY NÃO LOCAL STORAGE
+        # # ==========================================
+        # log_callback("🧹 Đang 'tẩy não' Local Storage để chống kẹt video...")
+        # await page.evaluate("""
+        #     localStorage.clear();
+        #     sessionStorage.clear();
+        # """)
+        # # Sau khi xóa, bắt buộc phải tải lại trang (F5) để web khởi tạo lại trạng thái sạch
+        # await page.reload(timeout=60000)
 
-    return True, failed_total
+        # page = context.pages[0] if context.pages else await context.new_page()
+    
+        # # ==========================================
+        # --- CHUẨN BỊ BĂM CHUNK ---
+        CHUNK_SIZE = 4
+        all_failed_objects = []
+        total_items = len(file_batch)
+        total_chunks = (total_items + CHUNK_SIZE - 1) // CHUNK_SIZE
+
+        log_callback(f"📦 Bắt đầu xử lý {total_items} video, chia làm {total_chunks} chunk (mỗi chunk {CHUNK_SIZE} video).")
+
+        await setup_video_creation_mode(page)
+    
+        # 🎯 Tiêm JS Radar vào trang web ngay trước khi bắt đầu nhập prompt
+        await inject_radar_js(page)
+        
+        # 4. VÒNG LẶP CHIA NHỎ VÀ ĐẨY VÀO HÀM CỐT LÕI
+        for i in range(0, total_items, CHUNK_SIZE):
+            chunk = file_batch[i:i + CHUNK_SIZE]
+            chunk_index = (i // CHUNK_SIZE) + 1
+            
+            log_callback(f"▶️ --- ĐANG CHẠY CHUNK {chunk_index}/{total_chunks} ---")
+
+            # Gọi hàm xử lý cốt lõi cho đúng 4 object này
+            is_chunk_ok, failed_in_chunk = await process_video_batch(
+                page, 
+                chunk, 
+                assets_path, 
+                log_callback
+            )
+            
+            # Gom những object bị xịt trong chunk này vào danh sách tổng
+            all_failed_objects.extend(failed_in_chunk)
+
+            # --- NGHỈ NGƠI CHỐNG SPAM ---
+            # Nếu chưa phải là chunk cuối cùng thì cho nghỉ 15-25 giây rồi mới chạy chunk tiếp
+            if i + CHUNK_SIZE < total_items:
+                cooldown = random.randint(5000, 7000)
+                log_callback(f"💤 Xong Chunk {chunk_index}. Nghỉ giải lao {cooldown//1000}s trước khi chạy mẻ tiếp theo...")
+                await page.wait_for_timeout(cooldown)
+
+        # 5. TỔNG KẾT SAU KHI CHẠY XONG TẤT CẢ CÁC CHUNK
+        if len(all_failed_objects) == total_items:
+            log_callback("❌ Toàn bộ file trong lượt này đều thất bại.")
+            return False, all_failed_objects 
+
+        # Nếu có xịt vài cái thì báo true, và trả về danh sách xịt để sau này retry
+        return True, all_failed_objects
+
+    except Exception as e:
+        log_callback(f"❌ Lỗi ở handle_prompt_to_video: {e}")
+        return False, file_batch
+        
+    finally:
+        # 6. THÊM 'await' KHI ĐÓNG TAB
+        try:
+            await page.close()
+        except:
+            pass
 
 def handle_srt_to_prompt(driver, batch, assets_path, prefix_prompt, url, log_callback):
     try:
