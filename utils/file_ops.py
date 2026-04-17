@@ -45,6 +45,8 @@ def get_prompt_video_status(json_path, out_dir):
                 
             task_item = item.copy()
             task_item["json_path"] = json_path
+            #visual_details la tat ca cac truong khac STT va Timecode
+            task_item["visual_details"] = {k: v for k, v in item.items() if k not in ["STT", "Timecode"]}
             task_item["video_path"] = None
 
             is_done = False
@@ -55,12 +57,9 @@ def get_prompt_video_status(json_path, out_dir):
             expected_video_path = os.path.join(out_dir, expected_filename)
             task_item["video_path"] = expected_video_path
 
-            # Kiểm tra đích danh file đó có tồn tại không
             if os.path.exists(expected_video_path):
                 is_done = True
-            # ---------------------------
             
-            # Phân loại task
             if is_done:
                 completed.append(task_item)
             else:

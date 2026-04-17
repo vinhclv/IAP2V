@@ -55,6 +55,11 @@
             "name": "flow",
             "url": "https://labs.google/fx/vi/tools/flow",
             "description": "Mô tả..."
+        },
+        {
+            "name": "s-p_aquan",
+            "url": "https://gemini.google.com/gem/1v7RlrvJrAqvzq7Q4c_IfTqHTtsJODllL?usp=sharing",
+            "description": "Mô tả..."
         }
     ],
     "standardize": {

@@ -2,12 +2,43 @@ import os
 import time
 import random
 import json
-from playwright.sync_api import Page, Locator
-import config # Giả sử bạn vẫn dùng file config.py để lưu setting
 import re
+# SỬA LẠI: Import bản async
+from playwright.async_api import Page, Locator 
+import config 
+
+# ==========================================
+# 🤖 HỆ THỐNG MÔ PHỎNG HÀNH VI NGƯỜI THẬT
+# ==========================================
+
+async def human_click(locator: Locator, page: Page, force: bool = False):
+    """
+    Mô phỏng click chuột của người thật bằng Virtual Mouse.
+    Không chiếm chuột vật lý của máy tính.
+    """
+    try:
+        # 1. Cuộn trang mượt mà tới phần tử (nếu nó đang bị khuất)
+        await locator.scroll_into_view_if_needed(timeout=5000)
+        
+        # 2. Rê chuột (hover) vào phần tử, tạo ra các sự kiện mousemove, mouseenter
+        await locator.hover(timeout=5000)
+        
+        # 3. Mắt người nhìn xác nhận trước khi bấm
+        await page.wait_for_timeout(random.uniform(100, 300))
+        
+        # 4. Nhấn chuột xuống và nhả ra với độ trễ của cơ tay (50ms - 150ms)
+        await locator.click(delay=random.randint(50, 150), force=force)
+    except Exception as e:
+        # Backup: Nếu phần tử bị thẻ div khác đè lên, ép click cơ bản nhưng vẫn có trễ
+        print(f"⚠️ Chuyển sang click dự phòng: {e}")
+        await locator.click(delay=random.randint(50, 150), force=True)
+
 async def human_type(locator: Locator, text: str, page: Page):
-    
-    await locator.click()
+    """
+    Mô phỏng gõ phím theo cụm (chunk) với tốc độ và nhịp thở của người thật.
+    """
+    # Thay vì click cứng, gọi hàm human_click
+    await human_click(locator, page)
     await page.wait_for_timeout(random.uniform(200, 400))
 
     idx = 0
@@ -15,19 +46,23 @@ async def human_type(locator: Locator, text: str, page: Page):
         chunk_size = random.randint(15, 30)
         chunk = text[idx:idx+chunk_size]
         
-        # 3. Ép tốc độ gõ phím siêu tốc: 5-10ms cho mỗi ký tự
+        # Ép tốc độ gõ phím siêu tốc: 5-10ms cho mỗi ký tự
         await locator.press_sequentially(chunk, delay=random.randint(5, 10))
         idx += chunk_size
         
-        # 4. Thời gian nghỉ giữa các cụm cực ngắn (20-50ms)
+        # Thời gian nghỉ giữa các cụm cực ngắn (20-50ms)
         await page.wait_for_timeout(random.uniform(20, 50))
         
-        # 5. Giảm tỷ lệ "suy nghĩ" xuống còn 5% và thời gian khựng cũng ngắn lại
+        # Giảm tỷ lệ "suy nghĩ" xuống còn 5% và thời gian khựng cũng ngắn lại
         if random.random() < 0.05:
             await page.wait_for_timeout(random.uniform(100, 200))
 
-    # 6. Giảm thời gian chờ chốt hạ
+    # Thời gian chờ chốt hạ
     await page.wait_for_timeout(random.uniform(200, 400))
+
+# ==========================================
+# ⚙️ LOGIC CHÍNH CỦA BẠN (Đã bọc Human Click)
+# ==========================================
 
 async def setup_video_creation_mode(page: Page):
     print("⚙️ Đang cấu hình giao diện (Mode -> Landscape -> Qty=1 -> Quality Model)...")
@@ -36,59 +71,46 @@ async def setup_video_creation_mode(page: Page):
         # 1. Tạo dự án
         create_btn = page.locator("i:has-text('add_2')").first
         if await create_btn.is_visible(timeout=45000):
-            await create_btn.click(timeout=5000)
+            await human_click(create_btn, page)
             await page.wait_for_timeout(1000)
         
         print("Đang chọn chế độ video...")
         dropdown_btn = page.locator("button[type='button'][aria-haspopup='menu']", has_text=re.compile(r"Banana|Video", re.IGNORECASE)).first
-        
-        # Chờ nút xuất hiện và sẵn sàng click
         await dropdown_btn.wait_for(state="visible", timeout=45000)
+        # Dùng human_click thay vì click thông thường, bật force=True như logic gốc của bạn
+        await human_click(dropdown_btn, page, force=True)
+        await page.wait_for_timeout(1000) 
+
+        await human_click(page.locator("i:has-text('videocam')").last, page)
+        await page.wait_for_timeout(500)
         
-        # Dùng click của Playwright (isTrusted = true). 
-        # Thêm delay để giả lập người bấm. Thêm force=True để ép click nếu web có thẻ div ẩn đè lên.
-        await dropdown_btn.click(delay=random.randint(50, 150), force=True)
-        await page.wait_for_timeout(1000) # Nghỉ 1s chờ menu xổ ra mượt mà
-
-        await page.locator("i:has-text('videocam')").last.click(timeout=5000)
-        await page.wait_for_timeout(500)
         print("Đang chọn chế độ thành phần...")
-
-        # 3. Chế độ Thành phần
-        await page.locator("i:has-text('chrome_extension')").first.click(timeout=5000)
+        await human_click(page.locator("i:has-text('chrome_extension')").first, page)
         await page.wait_for_timeout(500)
+        
         print("Đang chọn khung hình...")
-
-        # 4. Khung hình
-        await page.locator("i:has-text('crop_16_9')").last.click(timeout=5000)
+        await human_click(page.locator("i:has-text('crop_16_9')").last, page)
         await page.wait_for_timeout(500)
+        
         print("Đang chọn model...")
-
-        # 5. Chọn Model
-        await page.locator("i:has-text('arrow_drop_down')").first.click(timeout=5000)
+        await human_click(page.locator("i:has-text('arrow_drop_down')").first, page)
         await page.wait_for_timeout(500)
-        await page.locator("i:has-text('volume_up')").nth(1).click(timeout=5000)
+        await human_click(page.locator("i:has-text('volume_up')").nth(1), page)
         await page.wait_for_timeout(500)
+        
         print("Đang chọn số lượng = 1...")
-
-        # 6. Số lượng = 1
-        await page.locator("button.flow_tab_slider_trigger", has_text="x1").first.click(timeout=5000)
+        await human_click(page.locator("button.flow_tab_slider_trigger", has_text="x1").first, page)
         await page.wait_for_timeout(500)
+        
         print("Đang đóng bảng...")
-
-        # 7. Đóng bảng
-        await page.locator("i:has-text('crop_16_9')").first.click(timeout=5000)
+        await human_click(page.locator("i:has-text('crop_16_9')").first, page)
         await page.wait_for_timeout(500)
         print("✅ Đã cấu hình xong!")
 
     except Exception as e:
-        print(f"⚠️ Dừng ngay tại lỗi: {e}")
+        print(f"⚠️ Dừng ngay tại lỗi setup: {e}")
 
-# --- HÀM MỚI: TIÊM JS RADAR VÀO TRANG WEB ---
 async def inject_radar_js(page: Page):
-    """Tiêm đoạn JS săn lùng vào thẳng trình duyệt để nó chạy ngầm"""
-    
-    # THÊM CHỮ 'r' VÀO TRƯỚC DẤU NGOẶC KÉP
     js_interceptor = r"""
     (function() {
         window._python_results = window._python_results || {};
@@ -100,14 +122,13 @@ async def inject_radar_js(page: Page):
         window._isInterceptorInjected = true;
         console.log("%c[HỆ THỐNG] 🚀 ĐÃ BƠM RADAR BẮT SỐNG (ZERO LATENCY)...", "color: #ff00ff; font-size: 16px; font-weight: bold;");
 
-        // 1. CƯỚP CÒ XHR: Bắt link ngay lúc trình duyệt vừa tạo request
+        // 1. CƯỚP CÒ XHR
         const origOpen = XMLHttpRequest.prototype.open;
         const origSend = XMLHttpRequest.prototype.send;
 
         XMLHttpRequest.prototype.open = function(method, url) {
             this._intercept_url = typeof url === 'string' ? url : url.toString();
             
-            // Soi ngay xem có phải link tải video không
             let checkUrl = this._intercept_url;
             if (!checkUrl.toLowerCase().includes("thumbnail") && 
                 (checkUrl.includes("GoogleAccessId") || checkUrl.includes("media.getMediaUrlRedirect") || checkUrl.includes("storage.googleapis.com"))) {
@@ -147,12 +168,11 @@ async def inject_radar_js(page: Page):
             origSend.apply(this, arguments);
         };
 
-        // 2. CƯỚP CÒ FETCH: Bắt link ở cửa Fetch
+        // 2. CƯỚP CÒ FETCH
         const origFetch = window.fetch;
         window.fetch = async function(...args) {
             const url = args[0]?.url || args[0] || "";
             
-            // Soi link Fetch trước khi nó bay đi
             if (typeof url === 'string' && !url.toLowerCase().includes("thumbnail") && 
                (url.includes("GoogleAccessId") || url.includes("media.getMediaUrlRedirect") || url.includes("storage.googleapis.com"))) {
                 for (let [mediaId, stt] of Object.entries(window._mediaIdToSTT)) {
@@ -164,7 +184,7 @@ async def inject_radar_js(page: Page):
             }
 
             const response = await origFetch.apply(this, args);
-            // Soi JSON trạng thái
+            
             if (typeof url === 'string' && url.includes("batchCheckAsyncVideoGenerationStatus")) {
                 const clone = response.clone();
                 clone.text().then(text => {
@@ -188,8 +208,7 @@ async def inject_radar_js(page: Page):
             return response;
         };
 
-        // 3. QUÉT DOM SIÊU TỐC (Backup)
-        // Lỡ trình duyệt giấu link tải đi đâu đó mà gắn thẳng lên giao diện, ta mò trên UI
+        // 3. QUÉT DOM SIÊU TỐC
         setInterval(() => {
             const mediaElements = document.querySelectorAll('video, source');
             mediaElements.forEach(el => {
@@ -205,29 +224,22 @@ async def inject_radar_js(page: Page):
                     }
                 }
             });
-        }, 500); // Quét 2 lần mỗi giây
+        }, 500); 
 
     })();
     """
     await page.evaluate(js_interceptor)
 
-# --- HÀM 4: CỐT LÕI - XỬ LÝ BATCH ---
 async def process_video_batch(page: Page, file_batch: list, output_folder: str, log_callback=print):
-    """
-    Tham số `file_batch` nhận đầu vào là mảng list chứa các object.
-    """
-
-    
     tasks = {} 
     downloaded_urls = set() 
 
-    # --- GIAI ĐOẠN 1: SUBMIT (Lấy Data từ Object Dictionary) ---
+    # --- GIAI ĐOẠN 1: SUBMIT ---
     for item in file_batch:
         stt = str(item.get("STT", "")).strip()
         if not stt: continue
         
         save_path = item.get("video_path")
-        
         prompt_text = item.get("visual_details", "Cinematic masterpiece, hyper detailed")
         
         if os.path.exists(save_path):
@@ -246,14 +258,15 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
             textbox = page.locator("[role='textbox']")
             await textbox.wait_for(state="visible", timeout=15000) 
             
-            # GỌI HÀM VÀ THÊM AWAIT Ở ĐÂY
+            # Thay vì gọi click trực tiếp, human_type sẽ lo việc focus và gõ phím
             await human_type(textbox, f"{id_tag} {prompt_text}", page)
-            
             await page.wait_for_timeout(random.uniform(1000, 2000))
             
             btn_gen = page.locator("i:has-text('arrow_forward')").first
             await btn_gen.wait_for(state="visible", timeout=15000) 
-            await btn_gen.click()
+            
+            # Thay thế click thường bằng human_click cho nút submit
+            await human_click(btn_gen, page)
             await page.wait_for_timeout(random.uniform(5000, 6000))
             
         except Exception as e:
@@ -263,12 +276,10 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
     if not tasks: 
         return False, file_batch 
 
-    # --- GIAI ĐOẠN 2: COLLECT (Bằng cách đọc kết quả từ JS Radar) ---
+    # --- GIAI ĐOẠN 2: COLLECT ---
     log_callback(f"⏳ Chờ render {len(tasks)} video qua Radar JS...")
     start_time = time.time()
-    
-    # Ở đây mình tạm hardcode timeout. Nên thay bằng config.global_settings["system"]["wait_time"]
-    wait_time_limit =  config.global_settings["system"]["wait_time"]
+    wait_time_limit = config.global_settings["system"]["wait_time"]
     
     while time.time() - start_time < wait_time_limit:
         active_tasks = [uid for uid, info in tasks.items() if not info["done"]]
@@ -276,18 +287,15 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
             log_callback("✅ Tất cả video trong đợt này đã tải xong!")
             break
 
-        # Đọc biến window._python_results từ trình duyệt
         js_results_str = await page.evaluate("JSON.stringify(window._python_results || {})")
         js_results = json.loads(js_results_str)
 
         for uid in active_tasks:
             info = tasks[uid]
             
-            # Nếu JS Radar đã bắt được link của STT này
             if uid in js_results:
                 video_url = js_results[uid]
                 
-                # Tránh tải lại link đã tải
                 if video_url in downloaded_urls:
                     continue
                 
@@ -295,7 +303,6 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
                 log_callback(f"💾 Bắt đầu tải Video xịn: STT {uid}")
                 
                 try:
-                    # Dùng API của Playwright để tải thẳng file MP4
                     response = await page.request.get(video_url)
                     with open(info["save_path"], "wb") as f:
                         f.write(await response.body())
@@ -309,10 +316,8 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
                 except Exception as e:
                     log_callback(f"❌ Lỗi download MP4 STT {uid}: {e}")
 
-        await page.wait_for_timeout(3000) # Quét lại sau mỗi 3 giây
+        await page.wait_for_timeout(3000)
 
     # --- TỔNG KẾT BATCH ---
-    # Những object nào chưa "done" thì trả nguyên gốc lại để cho vào hàng đợi retry
     failed_objects = [v["original_item"] for k, v in tasks.items() if not v["done"]]
-    
     return len(failed_objects) == 0, failed_objects

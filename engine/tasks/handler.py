@@ -86,6 +86,7 @@ def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, 
 
     # Nếu làm được ít nhất 1 cái (hoặc skip do đã có) -> Profile OK
     return True, failed_list
+
 async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý batch prompt sang video.
@@ -94,7 +95,13 @@ async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_
     """
     # 2. THÊM 'await' KHI TẠO TAB MỚI
     page = await context.new_page() 
-    
+    # THÊM DÒNG NÀY VÀO HÀM HANDLE CỦA BẠN:
+    # 🛡️ TIÊM MÃ XÓA WEBDRIVER (Nhẹ nhàng, không làm vỡ giao diện)
+    await page.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+    """)
     try:
         # 3. THÊM 'await' CHO CÁC LỆNH CỦA TRÌNH DUYỆT
         await page.goto(url, timeout=60000) 
@@ -105,21 +112,7 @@ async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_
             log_callback("❌ Profile bị logout -> Dừng.")
             return False, file_batch 
 
-        # # ==========================================
-        # # 🧹 TUYỆT CHIÊU: TẨY NÃO LOCAL STORAGE
-        # # ==========================================
-        # log_callback("🧹 Đang 'tẩy não' Local Storage để chống kẹt video...")
-        # await page.evaluate("""
-        #     localStorage.clear();
-        #     sessionStorage.clear();
-        # """)
-        # # Sau khi xóa, bắt buộc phải tải lại trang (F5) để web khởi tạo lại trạng thái sạch
-        # await page.reload(timeout=60000)
 
-        # page = context.pages[0] if context.pages else await context.new_page()
-    
-        # # ==========================================
-        # --- CHUẨN BỊ BĂM CHUNK ---
         CHUNK_SIZE = 4
         all_failed_objects = []
         total_items = len(file_batch)
@@ -149,6 +142,26 @@ async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_
             
             # Gom những object bị xịt trong chunk này vào danh sách tổng
             all_failed_objects.extend(failed_in_chunk)
+
+            # Nếu có video xịt -> Có khả năng bị Google kẹt reCAPTCHA -> Tẩy trắng
+            if len(failed_in_chunk) > 1:
+                log_callback("⚠️ Phát hiện kẹt video! Đang tẩy trắng reCAPTCHA và reset giao diện...")
+                
+                # 1. Bắn tỉa Token
+                await page.evaluate("""
+                    localStorage.removeItem('_grecaptcha');
+                    sessionStorage.clear();
+                """)
+                
+                # 2. Tải lại trang để xóa hoàn toàn trạng thái lỗi đang lưu trên RAM của Web
+                await page.reload(timeout=60000)
+                await page.wait_for_timeout(4000)
+                
+                # 3. QUAN TRỌNG: Thiết lập lại Giao diện và Radar vì trang web vừa bị F5
+                # await setup_video_creation_mode(page)
+                await inject_radar_js(page)
+                
+                log_callback("✅ Tẩy trắng thành công! Sẵn sàng cho Chunk tiếp theo.")
 
             # --- NGHỈ NGƠI CHỐNG SPAM ---
             # Nếu chưa phải là chunk cuối cùng thì cho nghỉ 15-25 giây rồi mới chạy chunk tiếp
