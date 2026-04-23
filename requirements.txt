@@ -7,3 +7,4 @@ gologin==2025.11.17
 setuptools==80.10.1
 sv_ttk==2.6.1
 Pillow==12.1.0
+playwright==1.58.0

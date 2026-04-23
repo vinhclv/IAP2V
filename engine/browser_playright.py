@@ -106,6 +106,7 @@ async def init_driver_from_profile_playwright(profile_folder_path, log_callback=
     os.makedirs(profile_dl_dir, exist_ok=True)
 
     chrome_args = [
+        "--disable-blink-features=AutomationControlled",
         "--disable-backgrounding-occluded-windows",
         "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding",

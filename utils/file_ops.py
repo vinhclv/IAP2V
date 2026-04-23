@@ -25,7 +25,8 @@ def get_image_prompt_status(img_dir, out_dir):
 def get_prompt_video_status(json_path, out_dir):
     """
     Đọc file JSON đầu vào và kiểm tra trạng thái tiến độ tạo video.
-    Quét trực tiếp trong thư mục out_dir để tìm file {STT}_8s.mp4
+    Quét trực tiếp trong thư mục out_dir để tìm file với định dạng: {Type}-{StartTime}.mp4
+    Ví dụ: B-Roll-00-02-06-611.mp4
     """
     pending = []
     completed = []
@@ -45,18 +46,38 @@ def get_prompt_video_status(json_path, out_dir):
                 
             task_item = item.copy()
             task_item["json_path"] = json_path
-            #visual_details la tat ca cac truong khac STT va Timecode
+            # visual_details là tất cả các trường khác STT và Timecode
             task_item["visual_details"] = {k: v for k, v in item.items() if k not in ["STT", "Timecode"]}
             task_item["video_path"] = None
+            task_item["Timecode"] = item.get("Timecode")
 
-            is_done = False
+            # --- ĐOẠN XỬ LÝ TÊN FILE MỚI ---
+            timecode = item.get("Timecode", "")
+            v_type = item.get("Type", "Video") # Mặc định là 'Video' nếu không có trường Type
             
-            # --- ĐOẠN SỬA LÕI Ở ĐÂY ---
-            # Ghép thẳng tên file đích: out_dir/STT_8s.mp4
-            expected_filename = f"{stt_str}_8s.mp4"
+            # 1. Dọn dẹp trường Type (Xóa ngoặc vuông)
+            # Ví dụ: "[B-Roll]" -> "B-Roll"
+            clean_type = v_type.replace("[", "").replace("]", "").strip()
+            if not clean_type:
+                clean_type = "Video"
+            
+            # 2. Lấy thời gian bắt đầu và format lại
+            # Ví dụ: "00:02:06,611 --> 00:02:11,739" -> "00:02:06,611" -> "00-02-06-611"
+            start_time_str = "00-00-00-000" # Giá trị mặc định an toàn
+            if timecode and "-->" in timecode:
+                start_time_raw = timecode.split("-->")[0].strip()
+                # Thay dấu hai chấm và dấu phẩy thành gạch ngang
+                start_time_str = start_time_raw.replace(":", "-").replace(",", "-")
+            elif timecode:
+                # Fallback cho trường hợp timecode bị lỗi format thiếu '-->'
+                start_time_str = timecode.replace(":", "-").replace(",", "-").strip()
+
+            # 3. Ghép thành tên file đích
+            expected_filename = f"{stt_str}_{clean_type}-{start_time_str}.mp4"
             expected_video_path = os.path.join(out_dir, expected_filename)
             task_item["video_path"] = expected_video_path
 
+            is_done = False
             if os.path.exists(expected_video_path):
                 is_done = True
             
@@ -69,6 +90,7 @@ def get_prompt_video_status(json_path, out_dir):
         print(f"❌ Lỗi xử lý JSON: {e}")
         
     return pending, completed
+
 def get_srt_prompt_status(srt_path, output_dir):
     """
     Đọc file .srt và kiểm tra trạng thái dựa trên file JSON tổng nằm trong output_dir.
@@ -116,6 +138,7 @@ def get_srt_prompt_status(srt_path, output_dir):
             task_item = {
                 "STT": idx,           
                 "text": text,
+                "Timecode": time_range,
                 "json_path": json_output_path, 
             }
 

@@ -27,7 +27,7 @@ def process_srt_to_prompt(driver, chunk, log_callback=print):
         # --- 1. TẠO PROMPT ---
         srt_content_block = ""
         for item in chunk:
-            srt_content_block += f"STT {item['STT']}: {item['text']}\n"
+            srt_content_block += f"STT {item['STT']} - Timecode {item['Timecode']}: {item['text']}\n"
 
         prefix_instruction = (
             "COMMAND: You must output the result strictly inside a Markdown code block (```json ... ```).\n"

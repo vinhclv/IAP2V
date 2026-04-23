@@ -1,7 +1,7 @@
 import os
 import shutil
 from engine.tasks.image_to_prompt import process_image_to_prompt
-from engine.tasks.image_and_prompt_to_video import process_video_batch, setup_video_creation_mode, inject_radar_js
+from engine.tasks.prompt_to_video import process_video_batch, setup_video_creation_mode, inject_radar_js
 from engine.tasks.srt_to_prompt import process_srt_to_prompt
 from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
@@ -13,7 +13,7 @@ import re
 import random
 import config
 from urllib.parse import urlparse
-
+from flow_captcha_solver.stealth import STEALTH_SCRIPT
 def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
     """
     Xử lý danh sách ảnh để tạo prompt.
@@ -124,7 +124,7 @@ async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_
     
         # 🎯 Tiêm JS Radar vào trang web ngay trước khi bắt đầu nhập prompt
         await inject_radar_js(page)
-        
+        await page.context.add_init_script(STEALTH_SCRIPT)
         # 4. VÒNG LẶP CHIA NHỎ VÀ ĐẨY VÀO HÀM CỐT LÕI
         for i in range(0, total_items, CHUNK_SIZE):
             chunk = file_batch[i:i + CHUNK_SIZE]
@@ -160,6 +160,7 @@ async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_
                 # 3. QUAN TRỌNG: Thiết lập lại Giao diện và Radar vì trang web vừa bị F5
                 # await setup_video_creation_mode(page)
                 await inject_radar_js(page)
+                await page.context.add_init_script(STEALTH_SCRIPT)
                 
                 log_callback("✅ Tẩy trắng thành công! Sẵn sàng cho Chunk tiếp theo.")
 

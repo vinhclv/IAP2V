@@ -230,6 +230,64 @@ async def inject_radar_js(page: Page):
     """
     await page.evaluate(js_interceptor)
 
+
+def parse_duration_to_seconds(timecode_str: str) -> float:
+    try:
+        # Tách start và end
+        parts = timecode_str.split(" --> ")
+        def to_sec(t):
+            # Format: HH:MM:SS,mmm
+            h, m, s_ms = t.split(":")
+            s, ms = s_ms.split(",")
+            return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
+        duration = to_sec(parts[1]) - to_sec(parts[0])
+        return duration
+    except:
+        return 8.0 # Mặc định nếu lỗi
+        
+async def setup_video_duration(page: Page, timecode: str):
+    """
+    Cấu hình thời lượng video dựa trên timecode từ SRT.
+    Các tùy chọn: 4s, 6s, 8s.
+    """
+    print(f"⏳ Đang tính toán thời lượng cho: {timecode}")
+    
+    try:
+        # 1. Tính toán số giây thực tế
+        actual_seconds = parse_duration_to_seconds(timecode)
+        
+        # 2. Định danh mục tiêu (target)
+        if actual_seconds <= 4:
+            target_label = "4s"
+        elif actual_seconds <= 6:
+            target_label = "6s"
+        else:
+            target_label = "8s"
+            
+        print(f"-> Thời gian thực: {actual_seconds:.2f}s | Ép cấu hình: {target_label}")
+
+        # 3. Thực hiện tương tác UI
+        dropdown_btn = page.locator("button[type='button'][aria-haspopup='menu']", has_text=re.compile(r"Banana|Video", re.IGNORECASE)).first
+        await dropdown_btn.wait_for(state="visible", timeout=45000)
+        await human_click(dropdown_btn, page, force=True)
+        await page.wait_for_timeout(1000) 
+
+
+        # Tìm nút có text tương ứng (ví dụ: "4s", "6s", "8s")
+        duration_btn = page.locator("button, .flow_tab_slider_trigger", has_text=target_label).first
+        
+        if await duration_btn.is_visible(timeout=5000):
+            await human_click(duration_btn, page)
+            await human_click(page.locator("i:has-text('crop_16_9')").first, page)
+            await page.wait_for_timeout(500)
+            print(f"✅ Đã chọn thời lượng {target_label}")
+        else:
+            print(f"⚠️ Không tìm thấy nút {target_label} trong menu hiện tại.")
+
+    except Exception as e:
+        print(f"⚠️ Lỗi khi cấu hình duration: {e}")
+
 async def process_video_batch(page: Page, file_batch: list, output_folder: str, log_callback=print):
     tasks = {} 
     downloaded_urls = set() 
@@ -238,17 +296,19 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
     for item in file_batch:
         stt = str(item.get("STT", "")).strip()
         if not stt: continue
+
+        await setup_video_duration(page, item.get("Timecode"))
         
-        save_path = item.get("video_path")
+        video_path = item.get("video_path")
         prompt_text = item.get("visual_details", "Cinematic masterpiece, hyper detailed")
         
-        if os.path.exists(save_path):
+        if os.path.exists(video_path):
             log_callback(f"⏭️ Bỏ qua STT {stt} (Đã có video)")
             continue
 
         id_tag = f"||{stt}||"
         tasks[stt] = {
-            "save_path": save_path,
+            "video_path": video_path,
             "id_tag": id_tag,
             "done": False,
             "original_item": item
@@ -299,15 +359,15 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
                 if video_url in downloaded_urls:
                     continue
                 
-                os.makedirs(os.path.dirname(info["save_path"]), exist_ok=True)
+                os.makedirs(os.path.dirname(info["video_path"]), exist_ok=True)
                 log_callback(f"💾 Bắt đầu tải Video xịn: STT {uid}")
                 
                 try:
                     response = await page.request.get(video_url)
-                    with open(info["save_path"], "wb") as f:
+                    with open(info["video_path"], "wb") as f:
                         f.write(await response.body())
                         
-                    if os.path.exists(info["save_path"]) and os.path.getsize(info["save_path"]) > 0:
+                    if os.path.exists(info["video_path"]) and os.path.getsize(info["video_path"]) > 0:
                         log_callback(f"✅ Thành công: STT {uid}")
                         info["done"] = True
                         downloaded_urls.add(video_url)
