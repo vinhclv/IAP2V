@@ -18,9 +18,9 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
     task_log(f"🚀 Khởi động (Task: {task_type})...")
 
     # --- NẾU LÀ PLAYWRIGHT: ĐẨY SANG CẦU NỐI VÀ RETURN LUÔN ---
-    if task_type == "prompt_video":
+    if task_type in ["prompt_video", "2_image_prompt_video"]:
         is_healthy, failed_items = run_playwright_batch_sync(
-            p_path, batch, assets_path, prompt, url, task_log
+            p_path, batch, assets_path, prompt, url, task_log, task_type
         )
         task_log("Đóng trình duyệt Playwright.", "INFO")
         return is_healthy, failed_items
@@ -77,7 +77,8 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
 
     return is_healthy, failed_items
 
-async def playwright_lifecycle_manager(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback):
+from engine.tasks.handler import handle_2_image_prompt_video_async
+async def playwright_lifecycle_manager(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback, task_type):
     """
     Hàm này lo vòng đời của Playwright: Khởi tạo -> Chạy Logic -> Đóng dọn.
     Nó giống hệt cái khung try...finally của Selenium bên dưới.
@@ -90,9 +91,14 @@ async def playwright_lifecycle_manager(profile_path, file_batch, assets_path, pr
     try:
         # Bước 2: Truyền context vào Handler để làm nghiệp vụ chính
         # (Lưu ý: handle_prompt_to_video của Playwright giờ cũng phải là async def)
-        is_healthy, failed_items = await handle_prompt_to_video_async(
-            context, file_batch, assets_path, prefix_prompt, url, log_callback
-        )
+        if task_type == "prompt_video":
+            is_healthy, failed_items = await handle_prompt_to_video_async(
+                context, file_batch, assets_path, prefix_prompt, url, log_callback
+            )
+        elif task_type == "2_image_prompt_video":
+            is_healthy, failed_items = await handle_2_image_prompt_video_async(
+                context, file_batch, assets_path, prefix_prompt, url, log_callback
+            )
         return is_healthy, failed_items
         
     except Exception as e:
@@ -109,11 +115,11 @@ async def playwright_lifecycle_manager(profile_path, file_batch, assets_path, pr
             pass
 
 
-def run_playwright_batch_sync(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback):
+def run_playwright_batch_sync(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback, task_type):
     """HÀM CẦU NỐI: Bọc Async vào Sync"""
     try:
         return asyncio.run(
-            playwright_lifecycle_manager(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback)
+            playwright_lifecycle_manager(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback, task_type)
         )
     except Exception as e:
         # BẮT BUỘC PHẢI CÓ DÒNG NÀY ĐỂ BẮT ĐƯỢC BỆNH

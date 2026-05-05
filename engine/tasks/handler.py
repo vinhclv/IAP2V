@@ -1,7 +1,7 @@
 import os
 import shutil
 from engine.tasks.image_to_prompt import process_image_to_prompt
-from engine.tasks.prompt_to_video import process_video_batch, setup_video_creation_mode, inject_radar_js
+from engine.tasks.prompt_to_video import process_video_batch, setup_video_creation_mode, inject_radar_js, process_video_batch_with_image
 from engine.tasks.srt_to_prompt import process_srt_to_prompt
 from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
@@ -185,6 +185,83 @@ async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_
         
     finally:
         # 6. THÊM 'await' KHI ĐÓNG TAB
+        try:
+            await page.close()
+        except:
+            pass
+
+async def handle_2_image_prompt_video_async(context, file_batch, assets_path, prefix_prompt, url, log_callback):
+    """
+    Xử lý batch 2 image + prompt sang video.
+    """
+    page = await context.new_page() 
+    await page.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+    """)
+    try:
+        await page.goto(url, timeout=60000) 
+        await page.wait_for_timeout(5000)   
+        
+        if "accounts.google.com" in page.url:
+            log_callback("❌ Profile bị logout -> Dừng.")
+            return False, file_batch 
+
+        CHUNK_SIZE = 4
+        all_failed_objects = []
+        total_items = len(file_batch)
+        total_chunks = (total_items + CHUNK_SIZE - 1) // CHUNK_SIZE
+
+        log_callback(f"📦 Bắt đầu xử lý {total_items} video (Ảnh + Text), chia làm {total_chunks} chunk.")
+
+        await setup_video_creation_mode(page)
+        await inject_radar_js(page)
+        await page.context.add_init_script(STEALTH_SCRIPT)
+        
+        for i in range(0, total_items, CHUNK_SIZE):
+            chunk = file_batch[i:i + CHUNK_SIZE]
+            chunk_index = (i // CHUNK_SIZE) + 1
+            
+            log_callback(f"▶️ --- ĐANG CHẠY CHUNK {chunk_index}/{total_chunks} ---")
+
+            is_chunk_ok, failed_in_chunk = await process_video_batch_with_image(
+                page, 
+                chunk, 
+                assets_path, 
+                log_callback
+            )
+            
+            all_failed_objects.extend(failed_in_chunk)
+
+            if len(failed_in_chunk) > 1:
+                log_callback("⚠️ Phát hiện kẹt video! Đang tẩy trắng reCAPTCHA và reset giao diện...")
+                await page.evaluate("""
+                    localStorage.removeItem('_grecaptcha');
+                    sessionStorage.clear();
+                """)
+                await page.reload(timeout=60000)
+                await page.wait_for_timeout(4000)
+                await inject_radar_js(page)
+                await page.context.add_init_script(STEALTH_SCRIPT)
+                log_callback("✅ Tẩy trắng thành công! Sẵn sàng cho Chunk tiếp theo.")
+
+            if i + CHUNK_SIZE < total_items:
+                cooldown = random.randint(5000, 7000)
+                log_callback(f"💤 Xong Chunk {chunk_index}. Nghỉ giải lao {cooldown//1000}s...")
+                await page.wait_for_timeout(cooldown)
+
+        if len(all_failed_objects) == total_items:
+            log_callback("❌ Toàn bộ file trong lượt này đều thất bại.")
+            return False, all_failed_objects 
+
+        return True, all_failed_objects
+
+    except Exception as e:
+        log_callback(f"❌ Lỗi ở handle_2_image_prompt_video: {e}")
+        return False, file_batch
+        
+    finally:
         try:
             await page.close()
         except:

@@ -13,6 +13,7 @@
 | **SRT ➡ Multilanguage** | `srt_multilang` | File kịch bản `[Tên dự án].srt`    | Folder chứa file `[Tên dự án].json`       |
 | **SRT ➡ Shuffle**    | `srt_shuffle`    | File kịch bản `[Tên dự án].srt`    | Folder chứa file `[Tên dự án].json`       |
 | **Shuffle ➡ Image**  | `shuffle_image`  | Folder chứa ảnh                    | Folder chứa ảnh                           |
+| **2_Image + Prompt ➡ Video**| `2_image_prompt_video`| Folder Prompt + Folder Ảnh | Folder chứa Video
 
 [SETUP]
 1 Import Profile -> setup lần đầu ( đăng nhập vào gemini test)

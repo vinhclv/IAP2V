@@ -498,3 +498,56 @@ def get_shuffle_image_status(json_path, output_dir):
         print(f"❌ Lỗi đọc JSON Prompt Image: {e}")
         
     return pending, completed
+
+def get_2_image_prompt_video_status(prompt_dir, img_dir, out_dir):
+    """
+    Đọc folder prompt và folder ảnh, kiểm tra tiến độ tạo video.
+    """
+    pending = []
+    completed = []
+    
+    if not os.path.exists(prompt_dir) or not os.path.exists(img_dir):
+        return [], []
+        
+    try:
+        prompt_files = [f for f in os.listdir(prompt_dir) if f.endswith("_prompt.txt")]
+        
+        for pf in prompt_files:
+            stt = pf.replace("_prompt.txt", "") # e.g., "1-2"
+            parts = stt.split("-")
+            img1_id = parts[0]
+            img2_id = parts[1] if len(parts) > 1 else None
+            
+            with open(os.path.join(prompt_dir, pf), 'r', encoding='utf-8') as f:
+                prompt_text = f.read().strip()
+                
+            # Tìm ảnh tương ứng
+            image_path = os.path.join(img_dir, f"{img1_id}.jpg")
+            if not os.path.exists(image_path):
+                image_path = os.path.join(img_dir, f"{img1_id}.png")
+                
+            image_end_path = ""
+            if img2_id:
+                image_end_path = os.path.join(img_dir, f"{img2_id}.jpg")
+                if not os.path.exists(image_end_path):
+                    image_end_path = os.path.join(img_dir, f"{img2_id}.png")
+                
+            expected_video_path = os.path.join(out_dir, f"{stt}.mp4")
+            
+            task_item = {
+                "STT": stt,
+                "visual_details": prompt_text,
+                "image_path": image_path,
+                "image_end_path": image_end_path,
+                "video_path": expected_video_path
+            }
+            
+            if os.path.exists(expected_video_path) and os.path.getsize(expected_video_path) > 0:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+                
+    except Exception as e:
+        print(f"❌ Lỗi quét 2_image_prompt_video: {e}")
+        
+    return pending, completed

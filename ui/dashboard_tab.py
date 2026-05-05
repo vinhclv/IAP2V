@@ -48,7 +48,8 @@ class DashboardTab(ttk.Frame):
         self.cbo_mode['values'] = (
             "Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", 
             "Prompt ➡ Image", "2_Image ➡ Prompt", "SRT ➡ Image",
-            "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image"
+            "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image",
+            "2_Image + Prompt ➡ Video"
         )
         self.cbo_mode.pack(side="left", padx=5)
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
@@ -100,25 +101,33 @@ class DashboardTab(ttk.Frame):
         frame_add.columnconfigure(1, weight=1)
         
         # Input
-        tk.Label(frame_add, text="Input:", fg="white", bg="#2b2b2b").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.lbl_in = tk.Label(frame_add, text="Input:", fg="white", bg="#2b2b2b")
+        self.lbl_in.grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.entry_in = ttk.Entry(frame_add)
         self.entry_in.insert(0, DEFAULT_INPUT)
         self.entry_in.grid(row=0, column=1, sticky="ew", padx=5)
         self.btn_in = ttk.Button(frame_add, text="📂", width=3, command=self._pick_input)
         self.btn_in.grid(row=0, column=2, padx=5)
 
+        # Input 2 (Image Folder)
+        self.lbl_in2 = tk.Label(frame_add, text="Folder Ảnh:", fg="white", bg="#2b2b2b")
+        self.entry_in2 = ttk.Entry(frame_add)
+        self.entry_in2.insert(0, DEFAULT_INPUT)
+        self.btn_in2 = ttk.Button(frame_add, text="📂", width=3, command=lambda: self._pick_folder(self.entry_in2))
+
         # Output
-        tk.Label(frame_add, text="Output:", fg="white", bg="#2b2b2b").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        self.lbl_out = tk.Label(frame_add, text="Output:", fg="white", bg="#2b2b2b")
+        self.lbl_out.grid(row=2, column=0, sticky="w", padx=5, pady=5)
         self.entry_out = ttk.Entry(frame_add)
         self.entry_out.insert(0, DEFAULT_OUTPUT)
-        self.entry_out.grid(row=1, column=1, sticky="ew", padx=5)
+        self.entry_out.grid(row=2, column=1, sticky="ew", padx=5)
         self.btn_out = ttk.Button(frame_add, text="📂", width=3, command=lambda: self._pick_folder(self.entry_out))
-        self.btn_out.grid(row=1, column=2, padx=5)
+        self.btn_out.grid(row=2, column=2, padx=5)
 
         # GEM & Prompt
-        tk.Label(frame_add, text="GEM:", fg="white", bg="#2b2b2b").grid(row=2, column=0, sticky="w", padx=5, pady=5)
+        tk.Label(frame_add, text="GEM:", fg="white", bg="#2b2b2b").grid(row=3, column=0, sticky="w", padx=5, pady=5)
         frame_url_prompt = ttk.Frame(frame_add)
-        frame_url_prompt.grid(row=2, column=1, columnspan=2, sticky="ew", pady=5)
+        frame_url_prompt.grid(row=3, column=1, columnspan=2, sticky="ew", pady=5)
         frame_url_prompt.columnconfigure(0, weight=1)
         frame_url_prompt.columnconfigure(1, weight=2)
 
@@ -132,7 +141,7 @@ class DashboardTab(ttk.Frame):
         self._set_placeholder(self.entry_prompt, "Nhập Prompt (Tùy chọn)...")
 
         self.btn_add = ttk.Button(frame_add, text="⬇ THÊM", command=self.add_project_to_queue)
-        self.btn_add.grid(row=0, column=3, rowspan=3, padx=10, sticky="ns")
+        self.btn_add.grid(row=0, column=3, rowspan=4, padx=10, sticky="ns")
 
     def _build_dashboard_stats(self):
         """Khối 4: Hiển thị thống kê số lượng task"""
@@ -189,6 +198,17 @@ class DashboardTab(ttk.Frame):
             self.frame_langs.pack(fill="x", padx=10, pady=5, after=self.frame_ctrl)
         elif mode == "SRT ➡ Shuffle":
             self.frame_shuffle.pack(fill="x", padx=10, pady=5, after=self.frame_ctrl)
+            
+        if mode == "2_Image + Prompt ➡ Video":
+            self.lbl_in.config(text="Folder Prompt:")
+            self.lbl_in2.grid(row=1, column=0, sticky="w", padx=5, pady=5)
+            self.entry_in2.grid(row=1, column=1, sticky="ew", padx=5)
+            self.btn_in2.grid(row=1, column=2, padx=5)
+        else:
+            self.lbl_in.config(text="Input:")
+            self.lbl_in2.grid_forget()
+            self.entry_in2.grid_forget()
+            self.btn_in2.grid_forget()
 
     def _pick_input(self):
         mode = self.selected_mode.get()
@@ -209,6 +229,7 @@ class DashboardTab(ttk.Frame):
     def add_project_to_queue(self):
         inp = self.entry_in.get().strip()
         out = self.entry_out.get().strip()
+        inp2 = self.entry_in2.get().strip() if self.entry_in2.winfo_ismapped() else ""
         gem_name = self.cbo_gem_url.get().strip()
         prompt_val = self.entry_prompt.get().strip()
         mode = self.selected_mode.get()
@@ -216,6 +237,9 @@ class DashboardTab(ttk.Frame):
         if prompt_val == "Nhập Prompt (Tùy chọn)...": prompt_val = ""
         if not inp or not out or not gem_name:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập đầy đủ Input, Output và chọn GEM!")
+            return
+        if mode == "2_Image + Prompt ➡ Video" and not inp2:
+            messagebox.showwarning("Thiếu thông tin", "Vui lòng chọn thêm Folder Ảnh!")
             return
 
         selected_langs = []
@@ -235,7 +259,7 @@ class DashboardTab(ttk.Frame):
         real_url = next((g["url"] for g in self.gems_data if g["name"] == gem_name), "https://gemini.google.com")
 
         self.project_queue.append({
-            "input": inp, "output": out, "url": real_url, "gem_name": gem_name,
+            "input": inp, "input2": inp2, "output": out, "url": real_url, "gem_name": gem_name,
             "prompt": prompt_val, "languages": selected_langs, 
             "shuffle_gems": selected_shuffle_gems, "status": "Waiting"
         })
@@ -275,7 +299,8 @@ class DashboardTab(ttk.Frame):
     def refresh_treeview(self):
         for item in self.tree.get_children(): self.tree.delete(item)
         for i, p in enumerate(self.project_queue):
-            self.tree.insert("", "end", values=(i+1, p["input"], p["output"], p["gem_name"], p["prompt"], p["status"]))
+            input_disp = f"{p['input']} | ẢNH: {p['input2']}" if p.get('input2') else p["input"]
+            self.tree.insert("", "end", values=(i+1, input_disp, p["output"], p["gem_name"], p["prompt"], p["status"]))
 
     def _load_defaults(self):
         pass
