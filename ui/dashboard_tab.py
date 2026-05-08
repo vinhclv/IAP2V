@@ -49,7 +49,7 @@ class DashboardTab(ttk.Frame):
             "Image ➡ Prompt", "Prompt ➡ Video", "SRT ➡ Prompt", 
             "Prompt ➡ Image", "2_Image ➡ Prompt", "SRT ➡ Image",
             "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image",
-            "2_Image + Prompt ➡ Video"
+            "2_Image + Prompt ➡ Video", "Image + Prompt ➡ Video"
         )
         self.cbo_mode.pack(side="left", padx=5)
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
@@ -199,8 +199,21 @@ class DashboardTab(ttk.Frame):
         elif mode == "SRT ➡ Shuffle":
             self.frame_shuffle.pack(fill="x", padx=10, pady=5, after=self.frame_ctrl)
             
-        if mode == "2_Image + Prompt ➡ Video":
+        if mode == "Image ➡ Prompt":
+            self.lbl_in.config(text="File SRT:")
+            self.lbl_in2.configure(text="Thư mục Ảnh:")
+            self.lbl_in2.grid(row=1, column=0, sticky="w", padx=5, pady=5)
+            self.entry_in2.grid(row=1, column=1, sticky="ew", padx=5)
+            self.btn_in2.grid(row=1, column=2, padx=5)
+        elif mode == "2_Image + Prompt ➡ Video":
             self.lbl_in.config(text="Folder Prompt:")
+            self.lbl_in2.configure(text="Thư mục Ảnh:")
+            self.lbl_in2.grid(row=1, column=0, sticky="w", padx=5, pady=5)
+            self.entry_in2.grid(row=1, column=1, sticky="ew", padx=5)
+            self.btn_in2.grid(row=1, column=2, padx=5)
+        elif mode == "Image + Prompt ➡ Video":
+            self.lbl_in.config(text="File JSON Prompt:")
+            self.lbl_in2.configure(text="Thư mục Ảnh:")
             self.lbl_in2.grid(row=1, column=0, sticky="w", padx=5, pady=5)
             self.entry_in2.grid(row=1, column=1, sticky="ew", padx=5)
             self.btn_in2.grid(row=1, column=2, padx=5)
@@ -212,10 +225,10 @@ class DashboardTab(ttk.Frame):
 
     def _pick_input(self):
         mode = self.selected_mode.get()
-        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image", "Prompt ➡ Video"]
+        file_modes = ["SRT ➡ Prompt", "SRT ➡ Image", "Prompt ➡ Image", "SRT ➡ Multilanguage", "SRT ➡ Shuffle", "Shuffle ➡ Image", "Prompt ➡ Video", "Image ➡ Prompt", "Image + Prompt ➡ Video"]
         
         if mode in file_modes:
-            if "SRT" in mode:
+            if "SRT" in mode or mode == "Image ➡ Prompt":
                 f = filedialog.askopenfilename(title="Chọn file SRT", filetypes=[("SRT Files", "*.srt")])
             else:
                 f = filedialog.askopenfilename(title="Chọn file JSON", filetypes=[("JSON", "*.json")])
@@ -238,7 +251,21 @@ class DashboardTab(ttk.Frame):
         if not inp or not out or not gem_name:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập đầy đủ Input, Output và chọn GEM!")
             return
-        if mode == "2_Image + Prompt ➡ Video" and not inp2:
+        if mode == "Image ➡ Prompt":
+            if not inp or not os.path.isfile(inp):
+                messagebox.showerror("Lỗi", "Vui lòng chọn File SRT.")
+                return
+            if not inp2 or not os.path.isdir(inp2):
+                messagebox.showerror("Lỗi", "Vui lòng chọn Thư mục Ảnh.")
+                return
+        elif mode == "Image + Prompt ➡ Video":
+            if not inp or not os.path.isfile(inp):
+                messagebox.showerror("Lỗi", "Vui lòng chọn File JSON.")
+                return
+            if not inp2 or not os.path.isdir(inp2):
+                messagebox.showerror("Lỗi", "Vui lòng chọn Thư mục Ảnh.")
+                return
+        elif mode == "2_Image + Prompt ➡ Video" and not inp2:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng chọn thêm Folder Ảnh!")
             return
 

@@ -399,6 +399,112 @@ async def process_video_batch(page: Page, file_batch: list, output_folder: str, 
     failed_objects = [v["original_item"] for k, v in tasks.items() if not v["done"]]
     return len(failed_objects) == 0, failed_objects
 
+async def process_1_image_video_batch(page: Page, file_batch: list, output_folder: str, log_callback=print):
+    """
+    Hàm chuyên biệt để sinh video từ 1 Ảnh + Prompt + Timecode.
+    """
+    tasks = {}
+    downloaded_urls = set()
+
+    for item in file_batch:
+        stt = str(item.get("STT", "")).strip()
+        if not stt: continue
+
+        await setup_video_duration(page, item.get("Timecode", "00:00:00,000 --> 00:00:05,000"))
+        
+        video_path = item.get("video_path")
+        image_path = item.get("image_path")
+        prompt_text = item.get("visual_details", "")
+        
+        if os.path.exists(video_path):
+            log_callback(f"⏭️ Bỏ qua STT {stt} (Đã có video)")
+            continue
+
+        id_tag = f"||{stt}||"
+        tasks[stt] = {
+            "video_path": video_path,
+            "id_tag": id_tag,
+            "done": False,
+            "original_item": item
+        }
+        
+        try:
+            media_id = None
+            if image_path and os.path.exists(image_path):
+                log_callback(f"☁️ Đang upload ảnh ngầm STT {stt}...")
+                media_id = await upload_image_api(page, image_path)
+                
+            await page.unroute("**/*batchAsyncGenerateVideo*")
+            
+            if media_id:
+                log_callback(f"✅ Upload thành công, thiết lập Interceptor cho 1 Image STT {stt}")
+                await setup_image_to_video_interceptor(page, media_id, None)
+            else:
+                log_callback(f"⚠️ Không up được ảnh cho STT {stt}, sẽ tạo video text bình thường.")
+
+            textbox = page.locator("[role='textbox']")
+            await textbox.wait_for(state="visible", timeout=15000)
+            
+            await human_type(textbox, f"{id_tag} {prompt_text}", page)
+            await page.wait_for_timeout(random.uniform(1000, 2000))
+            
+            btn_gen = page.locator("i:has-text('arrow_forward')").first
+            await btn_gen.wait_for(state="visible", timeout=15000)
+            
+            await human_click(btn_gen, page)
+            await page.wait_for_timeout(random.uniform(5000, 6000))
+            
+        except Exception as e:
+            log_callback(f"❌ Lỗi gửi STT {stt}: {e}")
+            tasks.pop(stt, None)
+
+    if not tasks:
+        return False, file_batch
+
+    log_callback(f"⏳ Chờ render {len(tasks)} video qua Radar JS...")
+    start_time = time.time()
+    wait_time_limit = config.global_settings["system"]["wait_time"]
+    
+    while time.time() - start_time < wait_time_limit:
+        active_tasks = [uid for uid, info in tasks.items() if not info["done"]]
+        if not active_tasks:
+            log_callback("✅ Tất cả video trong đợt này đã tải xong!")
+            break
+
+        js_results_str = await page.evaluate("JSON.stringify(window._python_results || {})")
+        js_results = json.loads(js_results_str)
+
+        for uid in active_tasks:
+            info = tasks[uid]
+            
+            if uid in js_results:
+                video_url = js_results[uid]
+                
+                if video_url in downloaded_urls:
+                    continue
+                
+                os.makedirs(os.path.dirname(info["video_path"]), exist_ok=True)
+                log_callback(f"💾 Bắt đầu tải Video xịn: STT {uid}")
+                
+                try:
+                    response = await page.request.get(video_url)
+                    with open(info["video_path"], "wb") as f:
+                        f.write(await response.body())
+                        
+                    if os.path.exists(info["video_path"]) and os.path.getsize(info["video_path"]) > 0:
+                        log_callback(f"✅ Thành công: STT {uid}")
+                        info["done"] = True
+                        downloaded_urls.add(video_url)
+                    else:
+                        log_callback(f"⚠️ Lỗi tải file bị 0KB: STT {uid}")
+                except Exception as e:
+                    log_callback(f"❌ Lỗi download MP4 STT {uid}: {e}")
+
+        await page.wait_for_timeout(3000)
+
+    failed_objects = [v["original_item"] for k, v in tasks.items() if not v["done"]]
+    return len(failed_objects) == 0, failed_objects
+
 import base64
 
 async def upload_image_api(page: Page, image_path: str, project_id="21ee29f1-aa9c-42ea-aa15-b5042f93a751"):
@@ -455,10 +561,13 @@ async def setup_image_to_video_interceptor(page: Page, media_id: str, end_media_
     """
     Chặn request Text-to-Video do UI bắn ra, đổi nó thành Image-to-Video.
     """
+    print(f"📡 Bắt đầu cắm cờ Interceptor chờ tóm Request... (Media_id: {media_id})")
     async def handle_route(route):
         request = route.request
+        print(f"🎣 Interceptor lướt qua URL: {request.url}")
         
         if "batchAsyncGenerateVideo" in request.url and request.method == "POST":
+            print(f"🎯 BINGO! Đã tóm được Request tạo Video: {request.url}")
             try:
                 post_data = request.post_data_json
                 if "requests" in post_data and len(post_data["requests"]) > 0:
@@ -479,12 +588,15 @@ async def setup_image_to_video_interceptor(page: Page, media_id: str, end_media_
                         )
                     else:
                         post_data["requests"][0]["videoModelKey"] = "veo_3_1_i2v_s_fast_ultra"
-                        
                         new_url = request.url.replace(
                             "video:batchAsyncGenerateVideoText", 
                             "video:batchAsyncGenerateVideoStartImage"
                         )
-                await route.continue_(url=new_url, post_data=post_data)
+                
+                import json
+                final_post_data = json.dumps(post_data)
+                print(f"✅ Đã chặn và nhồi ảnh vào Payload ({'2 Ảnh' if end_media_id else '1 Ảnh'})!")
+                await route.continue_(url=new_url, post_data=final_post_data)
                 
             except Exception as e:
                 print(f"❌ Lỗi khi sửa Payload: {e}")

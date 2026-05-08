@@ -18,7 +18,7 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
     task_log(f"🚀 Khởi động (Task: {task_type})...")
 
     # --- NẾU LÀ PLAYWRIGHT: ĐẨY SANG CẦU NỐI VÀ RETURN LUÔN ---
-    if task_type in ["prompt_video", "2_image_prompt_video"]:
+    if task_type in ["prompt_video", "2_image_prompt_video", "1_image_prompt_video"]:
         is_healthy, failed_items = run_playwright_batch_sync(
             p_path, batch, assets_path, prompt, url, task_log, task_type
         )
@@ -77,7 +77,7 @@ def run_worker_task(profile_folder, batch, task_type, assets_path, prompt, url, 
 
     return is_healthy, failed_items
 
-from engine.tasks.handler import handle_2_image_prompt_video_async
+from engine.tasks.handler import handle_2_image_prompt_video_async, handle_1_image_prompt_video_async
 async def playwright_lifecycle_manager(profile_path, file_batch, assets_path, prefix_prompt, url, log_callback, task_type):
     """
     Hàm này lo vòng đời của Playwright: Khởi tạo -> Chạy Logic -> Đóng dọn.
@@ -97,6 +97,10 @@ async def playwright_lifecycle_manager(profile_path, file_batch, assets_path, pr
             )
         elif task_type == "2_image_prompt_video":
             is_healthy, failed_items = await handle_2_image_prompt_video_async(
+                context, file_batch, assets_path, prefix_prompt, url, log_callback
+            )
+        elif task_type == "1_image_prompt_video":
+            is_healthy, failed_items = await handle_1_image_prompt_video_async(
                 context, file_batch, assets_path, prefix_prompt, url, log_callback
             )
         return is_healthy, failed_items

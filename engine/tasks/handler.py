@@ -1,7 +1,7 @@
 import os
 import shutil
 from engine.tasks.image_to_prompt import process_image_to_prompt
-from engine.tasks.prompt_to_video import process_video_batch, setup_video_creation_mode, inject_radar_js, process_video_batch_with_image
+from engine.tasks.prompt_to_video import process_video_batch, setup_video_creation_mode, inject_radar_js, process_video_batch_with_image, process_1_image_video_batch
 from engine.tasks.srt_to_prompt import process_srt_to_prompt
 from engine.tasks.prompt_to_image import process_prompt_to_image
 from engine.tasks.pair_image_to_prompt import process_pair_images_to_prompt
@@ -16,8 +16,8 @@ from urllib.parse import urlparse
 from flow_captcha_solver.stealth import STEALTH_SCRIPT
 def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, log_callback):
     """
-    Xử lý danh sách ảnh để tạo prompt.
-    Logic sức khỏe: Dừng nếu lỗi liên tiếp hoặc thất bại toàn tập.
+    Xử lý danh sách tạo prompt từ ảnh + SRT.
+    Mỗi item là dict: {STT, timecode, content, img_path, json_path}
     """
     # 1. Vào trang & Check Login
     try:
@@ -29,43 +29,50 @@ def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, 
 
     if "accounts.google.com" in driver.current_url:
         log_callback("❌ Profile bị logout -> Dừng.")
-        return False, file_batch # Fail session
+        return False, file_batch
 
+    import json as _json
     failed_list = list(file_batch)
     consecutive_errors = 0
-    MAX_CONSECUTIVE_ERRORS = 5 # Ngưỡng lỗi cho phép liên tiếp
+    MAX_CONSECUTIVE_ERRORS = 5
     
-    for item_path in file_batch:
-        file_name = os.path.basename(item_path)
-        log_callback(f"▶️ [Text] Xử lý: {file_name}")
+    for item in file_batch:
+        stt = str(item["STT"])
+        img_path = item["img_path"]
+        timecode = item["timecode"]
+        content =  item["content"]
+        json_path = item["json_path"]
+        
+        log_callback(f"▶️ Đang xử lý STT {stt}: {os.path.basename(img_path)}")
         
         try:
-            file_name = os.path.basename(item_path)
-            sub_name = os.path.splitext(file_name)[0]
+            # --- 1. KIỂM TRA SKIP (JSON) ---
+            skip = False
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        data = _json.load(f)
+                        if any(str(i.get("STT")) == stt for i in data):
+                            skip = True
+                except: pass
             
-            # --- 1. KIỂM TRA SKIP (FILE PHẲNG) ---
-            prompt_file = os.path.join(assets_path, f"{sub_name}_prompt.txt")
-            
-            if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 10:
-                log_callback(f"⏭️ Đã có prompt: {sub_name}_prompt.txt -> Skip.")
-                if item_path in failed_list: failed_list.remove(item_path)
+            if skip:
+                log_callback(f"⏭️ STT {stt} đã có prompt -> Skip.")
+                if item in failed_list: failed_list.remove(item)
                 continue
 
-            # --- 2. GỌI XỬ LÝ (DÙNG TRỰC TIẾP item_path GỐC) ---
-            log_callback(f"▶️ Đang phân tích: {file_name}")
-
-            # 3. Gọi hàm xử lý core
-            # Truyền assets_path làm thư mục đích thay vì folder con
-            success = process_image_to_prompt(driver, item_path, assets_path, lambda m: log_callback(m))
+            # --- 2. GỌI XỬ LÝ CORE ---
+            success = process_image_to_prompt(
+                driver, img_path, json_path, stt, timecode, content,
+                lambda m: log_callback(m)
+            )
             if success:
-                log_callback(f"✅ Xong: {file_name}")
-                if item_path in failed_list: failed_list.remove(item_path)
-                consecutive_errors = 0 # Reset lỗi vì vừa thành công
+                log_callback(f"✅ Xong STT {stt}")
+                if item in failed_list: failed_list.remove(item)
+                consecutive_errors = 0
             else:
                 consecutive_errors += 1
-                log_callback(f"⚠️ Lỗi xử lý ({consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}): {file_name}")
-                
-                # [STOP LOSS] Nếu lỗi liên tiếp quá nhiều -> Dừng Profile
+                log_callback(f"⚠️ Lỗi ({consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}): STT {stt}")
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                     log_callback("💀 Gemini lỗi liên tiếp -> Đánh dấu Profile hỏng.")
                     return False, failed_list
@@ -73,18 +80,15 @@ def handle_image_to_prompt(driver, file_batch, assets_path, prefix_prompt, url, 
                 time.sleep(5)
 
         except Exception as e:
-            log_callback(f"❌ Exception nghiêm trọng: {e}")
+            log_callback(f"❌ Exception: {e}")
             consecutive_errors += 1
             if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 return False, failed_list
 
-    # 4. Kiểm tra tổng kết
-    # Nếu chạy hết mà không được cái nào (Fail 100%) -> Profile hỏng
     if len(failed_list) == len(file_batch):
-        log_callback("❌ Thất bại toàn tập (0/{}) -> Profile hỏng.".format(len(file_batch)))
+        log_callback("❌ Thất bại toàn tập -> Profile hỏng.")
         return False, failed_list
 
-    # Nếu làm được ít nhất 1 cái (hoặc skip do đã có) -> Profile OK
     return True, failed_list
 
 async def handle_prompt_to_video_async(context, file_batch, assets_path, prefix_prompt, url, log_callback):
@@ -259,6 +263,83 @@ async def handle_2_image_prompt_video_async(context, file_batch, assets_path, pr
 
     except Exception as e:
         log_callback(f"❌ Lỗi ở handle_2_image_prompt_video: {e}")
+        return False, file_batch
+        
+    finally:
+        try:
+            await page.close()
+        except:
+            pass
+
+async def handle_1_image_prompt_video_async(context, file_batch, assets_path, prefix_prompt, url, log_callback):
+    """
+    Xử lý batch 1 image + prompt sang video (tự cấu hình timecode).
+    """
+    page = await context.new_page() 
+    await page.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+    """)
+    try:
+        await page.goto(url, timeout=60000) 
+        await page.wait_for_timeout(5000)   
+        
+        if "accounts.google.com" in page.url:
+            log_callback("❌ Profile bị logout -> Dừng.")
+            return False, file_batch 
+
+        CHUNK_SIZE = 4
+        all_failed_objects = []
+        total_items = len(file_batch)
+        total_chunks = (total_items + CHUNK_SIZE - 1) // CHUNK_SIZE
+
+        log_callback(f"📦 Bắt đầu xử lý {total_items} video (1 Ảnh + Text), chia làm {total_chunks} chunk.")
+
+        await setup_video_creation_mode(page)
+        await inject_radar_js(page)
+        await page.context.add_init_script(STEALTH_SCRIPT)
+        
+        for i in range(0, total_items, CHUNK_SIZE):
+            chunk = file_batch[i:i + CHUNK_SIZE]
+            chunk_index = (i // CHUNK_SIZE) + 1
+            
+            log_callback(f"▶️ --- ĐANG CHẠY CHUNK {chunk_index}/{total_chunks} ---")
+
+            is_chunk_ok, failed_in_chunk = await process_1_image_video_batch(
+                page, 
+                chunk, 
+                assets_path, 
+                log_callback
+            )
+            
+            all_failed_objects.extend(failed_in_chunk)
+
+            if len(failed_in_chunk) > 1:
+                log_callback("⚠️ Phát hiện kẹt video! Đang tẩy trắng reCAPTCHA và reset giao diện...")
+                await page.evaluate("""
+                    localStorage.removeItem('_grecaptcha');
+                    sessionStorage.clear();
+                """)
+                await page.reload(timeout=60000)
+                await page.wait_for_timeout(4000)
+                await inject_radar_js(page)
+                await page.context.add_init_script(STEALTH_SCRIPT)
+                log_callback("✅ Tẩy trắng thành công! Sẵn sàng cho Chunk tiếp theo.")
+
+            if i + CHUNK_SIZE < total_items:
+                cooldown = random.randint(5000, 7000)
+                log_callback(f"💤 Xong Chunk {chunk_index}. Nghỉ giải lao {cooldown//1000}s...")
+                await page.wait_for_timeout(cooldown)
+
+        if len(all_failed_objects) == total_items:
+            log_callback("❌ Toàn bộ file trong lượt này đều thất bại.")
+            return False, all_failed_objects 
+
+        return True, all_failed_objects
+
+    except Exception as e:
+        log_callback(f"❌ Lỗi ở handle_1_image_prompt_video: {e}")
         return False, file_batch
         
     finally:

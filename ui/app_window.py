@@ -95,6 +95,7 @@ class BatchApp:
             "Prompt ➡ Image": "prompt_image",
             "2_Image ➡ Prompt": "2_image_prompt",
             "2_Image + Prompt ➡ Video": "2_image_prompt_video",
+            "Image + Prompt ➡ Video": "1_image_prompt_video",
             "SRT ➡ Image": "srt_image",
             "SRT ➡ Multilanguage": "srt_multilanguage",
             "SRT ➡ Shuffle": "srt_shuffle",

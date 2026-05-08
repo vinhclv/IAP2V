@@ -1,7 +1,7 @@
 {
     "system": {
         "max_threads": 4,
-        "loop_limit": 2,
+        "loop_limit": 5,
         "max_retries": 10,
         "wait_time": 90
     },
@@ -59,6 +59,11 @@
         {
             "name": "spaquan",
             "url": "https://gemini.google.com/gem/1e9KfcbdBsFjCVcm0ziE4mP_VJbzubvmp?usp=sharing",
+            "description": "Mô tả..."
+        },
+        {
+            "name": "srt+image=>prt",
+            "url": "https://gemini.google.com/gem/1NMRSEykwV4GoZBwj8BrN7vc2A4dLbQIe?usp=sharing",
             "description": "Mô tả..."
         }
     ],

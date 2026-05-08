@@ -2,25 +2,76 @@ import os
 import re
 import json
 
-def get_image_prompt_status(img_dir, out_dir):
-    """Quét trạng thái: Mỗi ảnh tương ứng với một file [tên_ảnh]_prompt.txt"""
-    if not os.path.exists(img_dir): return [], []
+def get_image_prompt_status(srt_path, img_dir, out_dir):
+    """
+    Đọc SRT + Folder ảnh, map từng dòng sub với ảnh tương ứng (STT.jpg).
+    Kiểm tra xem STT đó đã có trong file JSON output chưa.
+    File JSON output: out_dir/<tên_folder_ảnh>.json
+    """
+    if not os.path.exists(srt_path) or not os.path.exists(img_dir):
+        return [], []
     
-    all_imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
     pending, completed = [], []
     
-    for img in all_imgs:
-        name_no_ext = os.path.splitext(img)[0]
-        # CẬP NHẬT Ở ĐÂY: Đường dẫn file kiểu out_dir/tên_ảnh_prompt.txt
-        prompt_file = os.path.join(out_dir, f"{name_no_ext}_prompt.txt")
-        full_img_path = os.path.join(img_dir, img) 
+    try:
+        # 1. Đọc SRT
+        with open(srt_path, 'r', encoding='utf-8') as f:
+            content = f.read()
         
-        if os.path.exists(prompt_file) and os.path.getsize(prompt_file) > 0:
-            completed.append(full_img_path)
-        else:
-            pending.append(full_img_path)
+        pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3})\n(.*?)(?=\n\d+\n|\Z)', re.DOTALL)
+        matches = pattern.findall(content)
+        
+        if not matches:
+            return [], []
+        
+        # 2. Xác định file JSON output theo tên folder ảnh
+        img_folder_name = os.path.basename(os.path.normpath(img_dir))
+        json_output_path = os.path.join(out_dir, f"{img_folder_name}.json")
+        
+        # 3. Đọc các STT đã done từ JSON (nếu có)
+        completed_ids = set()
+        if os.path.exists(json_output_path):
+            try:
+                with open(json_output_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        for item in data:
+                            if "STT" in item:
+                                completed_ids.add(str(item["STT"]))
+            except Exception as e:
+                print(f"⚠️ Lỗi đọc JSON output: {e}")
+        
+        # 4. Map STT -> ảnh -> task
+        for idx, timecode, text in matches:
+            idx = str(idx).strip()
+            text = text.strip().replace('\n', ' ')
             
+            # Tìm file ảnh theo STT
+            img_path = os.path.join(img_dir, f"{idx}.jpg")
+            if not os.path.exists(img_path):
+                img_path = os.path.join(img_dir, f"{idx}.png")
+            
+            if not os.path.exists(img_path):
+                continue  # Không có ảnh tương ứng -> bỏ qua
+            
+            task_item = {
+                "STT": idx,
+                "timecode": timecode,
+                "content": text,
+                "img_path": img_path,
+                "json_path": json_output_path
+            }
+            
+            if idx in completed_ids:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+    
+    except Exception as e:
+        print(f"❌ Lỗi get_image_prompt_status: {e}")
+    
     return pending, completed
+
 
 def get_prompt_video_status(json_path, out_dir):
     """
@@ -551,3 +602,64 @@ def get_2_image_prompt_video_status(prompt_dir, img_dir, out_dir):
         print(f"❌ Lỗi quét 2_image_prompt_video: {e}")
         
     return pending, completed
+
+def get_1_image_prompt_video_status(json_path, img_dir, out_dir):
+    """
+    Đọc file JSON Prompt và folder ảnh, kiểm tra tiến độ tạo video 1 Image.
+    """
+    pending = []
+    completed = []
+    
+    if not os.path.exists(json_path) or not os.path.exists(img_dir):
+        return [], []
+        
+    try:
+        import json
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        for item in data:
+            stt = str(item.get("STT"))
+            timecode = item.get("timecode", "")
+            prompt_text = item.get("prompt", "")
+            
+            duration = 5
+            if timecode:
+                try:
+                    parts = timecode.split('-->')
+                    if len(parts) == 2:
+                        def to_seconds(tc):
+                            tc = tc.strip()
+                            h, m, s = tc.split(':')
+                            s, ms = s.split(',')
+                            return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+                        duration = to_seconds(parts[1]) - to_seconds(parts[0])
+                except: pass
+                
+            image_path = os.path.join(img_dir, f"{stt}.jpg")
+            if not os.path.exists(image_path):
+                image_path = os.path.join(img_dir, f"{stt}.png")
+                
+            if not os.path.exists(image_path):
+                continue
+                
+            expected_video_path = os.path.join(out_dir, f"{stt}.mp4")
+            
+            task_item = {
+                "STT": stt,
+                "visual_details": prompt_text,
+                "image_path": image_path,
+                "duration": duration,
+                "Timecode": timecode,
+                "video_path": expected_video_path
+            }
+            
+            if os.path.exists(expected_video_path) and os.path.getsize(expected_video_path) > 0:
+                completed.append(task_item)
+            else:
+                pending.append(task_item)
+                
+    except Exception as e:
+        print(f"❌ Lỗi quét 1_image_prompt_video: {e}")
+        
+    return pending, completed

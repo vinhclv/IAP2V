@@ -6,7 +6,7 @@ import os
 import concurrent.futures
 
 from config import DEFAULT_PROFILES
-from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status, get_srt_image_status, get_srt_multilanguage_status, get_srt_shuffle_status, get_shuffle_image_status, get_2_image_prompt_video_status
+from utils.file_ops import get_image_prompt_status, get_prompt_video_status, get_srt_prompt_status, get_prompt_image_status, get_2_image_prompt_status, get_srt_image_status, get_srt_multilanguage_status, get_srt_shuffle_status, get_shuffle_image_status, get_2_image_prompt_video_status, get_1_image_prompt_video_status
 from engine.worker import run_worker_task
 import config
 class BatchProcessor:
@@ -64,7 +64,7 @@ class BatchProcessor:
         while not self.stop_event.is_set():
             match loop_type:
                 case "image_prompt":
-                    pending, _ = get_image_prompt_status(inp, out)
+                    pending, _ = get_image_prompt_status(inp, inp2, out)
                 case "srt_prompt":
                     pending, _ = get_srt_prompt_status(inp, out)
                 case "prompt_image":
@@ -81,6 +81,8 @@ class BatchProcessor:
                     pending, _ = get_shuffle_image_status(inp, out)
                 case "2_image_prompt_video":
                     pending, _ = get_2_image_prompt_video_status(inp, inp2, out)
+                case "1_image_prompt_video":
+                    pending, _ = get_1_image_prompt_video_status(inp, inp2, out)
                 case _:
                     pending, _ = get_prompt_video_status(inp,out)
 
@@ -131,8 +133,9 @@ class BatchProcessor:
 
                 match loop_type:
                     case "image_prompt": 
-                        actual_pending, _ = get_image_prompt_status(inp_path, out_path)
-                        batch = [item for item in candidates if item in actual_pending]
+                        actual_pending, _ = get_image_prompt_status(inp_path, inp2_path, out_path)
+                        ap_stts = [i.get("STT") for i in actual_pending]
+                        batch = [item for item in candidates if isinstance(item, dict) and item.get("STT") in ap_stts]
                     case "srt_prompt":
                         actual_pending, _ = get_srt_prompt_status(inp_path, out_path)
                         batch = actual_pending # Ném cả file vào luôn vì srt rất nhỏ
@@ -140,8 +143,9 @@ class BatchProcessor:
                         actual_pending, _ = get_prompt_image_status(inp_path, out_path)
                         batch = [item for item in candidates if item in actual_pending]
                     case "2_image_prompt":
-                        actual_pending, _ = get_2_image_prompt_status(inp_path, out_path)
-                        batch = [item for item in candidates if item in actual_pending]
+                        actual_pending, _ = get_2_image_prompt_status(inp_path, inp2_path, out_path)
+                        ap_stts = [i.get("STT") for i in actual_pending]
+                        batch = [item for item in candidates if isinstance(item, dict) and item.get("STT") in ap_stts]
                     case "srt_image":
                         actual_pending, _ = get_srt_image_status(inp_path, out_path)
                         batch = [item for item in candidates if item in actual_pending]
@@ -157,6 +161,10 @@ class BatchProcessor:
                     case "2_image_prompt_video":
                         actual_pending, _ = get_2_image_prompt_video_status(inp_path, inp2_path, out_path)
                         batch = [item for item in candidates if item in actual_pending]
+                    case "1_image_prompt_video":
+                        actual_pending, _ = get_1_image_prompt_video_status(inp_path, inp2_path, out_path)
+                        ap_stts = [i.get("STT") for i in actual_pending]
+                        batch = [item for item in candidates if isinstance(item, dict) and item.get("STT") in ap_stts]
                     case _: # prompt_video 
                         actual_pending, _ = get_prompt_video_status(inp_path,out_path)
                         batch = [item for item in candidates if item in actual_pending]
@@ -184,13 +192,13 @@ class BatchProcessor:
                     
                     match loop_type:
                         case "image_prompt":
-                            pending, completed = get_image_prompt_status(inp, out)
+                            pending, completed = get_image_prompt_status(inp, inp2, out)
                         case "srt_prompt":
                             pending, completed = get_srt_prompt_status(inp, out)
                         case "prompt_image":
                             pending, completed = get_prompt_image_status(inp, out)
                         case "2_image_prompt":
-                            pending, completed = get_2_image_prompt_status(inp, out)
+                            pending, completed = get_2_image_prompt_status(inp, inp2, out)
                         case "srt_image":
                             pending, completed = get_srt_image_status(inp, out)
                         case "srt_multilanguage":
@@ -201,6 +209,8 @@ class BatchProcessor:
                             pending, completed = get_shuffle_image_status(inp, out)
                         case "2_image_prompt_video":
                             pending, completed = get_2_image_prompt_video_status(inp, inp2, out)
+                        case "1_image_prompt_video":
+                            pending, completed = get_1_image_prompt_video_status(inp, inp2, out)
                         case _: # prompt_video
                             pending, completed = get_prompt_video_status(inp,out)
 
