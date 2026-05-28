@@ -7,6 +7,58 @@ from config import DEFAULT_INPUT, DEFAULT_OUTPUT, load_config, global_settings
 
 SETTINGS_FILE = "settings.json"
 
+from utils.instructions import MODE_HELP_DATA
+
+
+
+# ==========================================
+# 🛠 LỚP HỖ TRỢ HIỂN THỊ TOOLTIP KHI HOVER
+# ==========================================
+class HoverTooltip:
+    def __init__(self, widget, text_func):
+        self.widget = widget
+        self.text_func = text_func
+        self.tip_window = None
+        self.widget.bind("<Enter>", self.show_tip)
+        self.widget.bind("<Leave>", self.hide_tip)
+
+    def show_tip(self, event=None):
+        text = self.text_func()
+        if not text:
+            return
+        if self.tip_window:
+            return
+            
+        x = self.widget.winfo_rootx() + 25
+        y = self.widget.winfo_rooty() + 20
+        self.tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(1)
+        tw.wm_geometry(f"+{x}+{y}")
+        
+        # Thiết kế tooltip tối hiện đại đồng bộ theme
+        frame = tk.Frame(tw, background="#1e1e1e", highlightbackground="#57bdf2", highlightthickness=1, bd=0)
+        frame.pack(padx=1, pady=1)
+        
+        lbl = tk.Label(
+            frame, 
+            text=text, 
+            justify=tk.LEFT,
+            background="#1e1e1e", 
+            foreground="#e0e0e0",
+            font=("Segoe UI", 10),
+            padx=12,
+            pady=10,
+            wraplength=380
+        )
+        lbl.pack(ipadx=1)
+
+    def hide_tip(self, event=None):
+        tw = self.tip_window
+        self.tip_window = None
+        if tw:
+            tw.destroy()
+
+
 class DashboardTab(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -53,6 +105,21 @@ class DashboardTab(ttk.Frame):
         )
         self.cbo_mode.pack(side="left", padx=5)
         self.cbo_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
+
+        # Nút (ⓘ Hướng dẫn) cạnh combobox chế độ chạy
+        self.lbl_info = tk.Label(
+            self.frame_ctrl, 
+            text=" ⓘ", 
+            font=("Segoe UI", 10, "bold"), 
+            fg="#57bdf2", 
+            bg="#2b2b2b", 
+            cursor="hand2",
+            padx=5
+        )
+        self.lbl_info.pack(side="left", padx=5)
+        
+        # Liên kết tooltip hướng dẫn theo chế độ đang chọn
+        HoverTooltip(self.lbl_info, lambda: MODE_HELP_DATA.get(self.selected_mode.get(), ""))
 
         self.btn_run = ttk.Button(self.frame_ctrl, text="▶ CHẠY LIST", style="Accent.TButton", command=self.controller.on_start_batch)
         self.btn_run.pack(side="left", padx=20)
